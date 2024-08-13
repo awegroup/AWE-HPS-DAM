@@ -1,8 +1,8 @@
-function inp = eco_system_inputs_Example_SE(inputs, processedOutputs)
+function inp = inputSheet_Eco_HPP(inputs, processedOutputs)
 
   global eco_settings
 
-  eco_settings.input_cost_file  = 'eco_cost_inputs_GG_fixed.xlsx'; % set the input file
+  eco_settings.input_cost_file  = 'eco_cost_inputs_GG_fixed_HPP.xlsx'; % set the input file
   eco_settings.input_model_file = 'code'; % code || set the input file
   eco_settings.power            = 'GG';  % FG || GG 
   eco_settings.wing             = 'fixed';  % fixed || soft
@@ -43,8 +43,8 @@ function inp = eco_system_inputs_Example_SE(inputs, processedOutputs)
   inp.system.Dt_cycle  = processedOutputs.tCycle; % s
   
   % Ground station
-  inp.gStation.ultracap.E_rated = 85; % kWh
-  inp.gStation.ultracap.E_ex    = processedOutputs.ultraCapSize; % kWh
+  inp.gStation.ultracap.E_rated = 1.1*max(processedOutputs.storageExchange)/1e3; % kWh % 10% oversizing safety factor; % kWh
+  inp.gStation.ultracap.E_ex    = processedOutputs.storageExchange; % kWh
   inp.gStation.ultracap.f_repl  = -1; % /year                          
   inp.gStation.hydAccum.E_rated = inp.gStation.ultracap.E_rated ;  % kWh
   inp.gStation.hydAccum.E_ex    = inp.gStation.ultracap.E_ex; % kWh

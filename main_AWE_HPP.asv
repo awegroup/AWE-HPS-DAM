@@ -167,8 +167,8 @@ Battery.Minimum     = 0.1*Battery.Size;
 Battery.Maximum     = 0.9*Battery.Size;
 Battery.Eff         = 0.9;                  %Round trip efficiency
 
-AWEarb.w = 5;
-AWEarb.var = 0.1;
+AWEarb.w = 6;
+AWEarb.var = 0.0;
 
 
 AWEarb.Batt       = ones(8760,1);       % set-up

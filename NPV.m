@@ -1,4 +1,4 @@
-function NPV = NPV(r,R,ICC,OMC,N_y)
+function [NPV, NPVflow] = NPV(r,R,ICC,OMC,N_y)
   %ECO_NPV Calculate the net present value NPV and it is used to compute the
   %internal rate of return IRR
   %
@@ -11,8 +11,10 @@ function NPV = NPV(r,R,ICC,OMC,N_y)
   %   Outputs:
   %   - NPV: Updated input structure after processing.
 
+NPVflow = ones(1,N_y);
 for t = 1:N_y
-    NPV =  -ICC + (R - OMC)/(1+r)^t;
+    NPVflow(t) =  (R - OMC)/(1+r)^t;
 end
 
+NPV = -ICC + sum(NPVflow);
 end

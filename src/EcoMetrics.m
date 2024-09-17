@@ -1,4 +1,4 @@
-function [LCoE, LRoE, LPoE, NPV1] = EcoMetrics(r,R,E,ICC,OMC,N_y)
+function [LCoE, LRoE, LPoE, Payback_year] = EcoMetrics(r,R,E,ICC,OMC,N_y)
   %ECO_NPV Calculate the net present value NPV and it is used to compute the
   %internal rate of return IRR
   %
@@ -34,6 +34,20 @@ LRoE = sum(LRoE_num)/sum(LRoE_den);
 
 LPoE = LRoE - LCoE;
 
-NPV1 = LPoE * sum(LCoE_den);
+
+Cashflow = zeros(1, N_y + 1);
+Cashflow(1) = -ICC; 
+  for t = 1:N_y
+      Cashflow(t + 1) = R - OMC;
+  end
+
+  % Calculate cumulative cashflow
+  CumCashflow = cumsum(Cashflow);
+  
+  % Find the payback year
+  Payback_year = find(CumCashflow >= 0, 1);
+  
+  % Adjust payback year for zero-indexing in the array
+  Payback_year = Payback_year - 1;
 
 end

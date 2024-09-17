@@ -50,9 +50,8 @@ Battery.Size        = 140e3;                % Wh
 Battery.Type        = 1;                    % P/E or C rate
 Battery.prog      = 1;                      % Battery price prognosis, 1: optimistic, 2: conservative
 Cost.BatteryPrice   = [0.130 0.225];        % [EUR/Wh] first element is optimistic and second is conservative for 2030 projections source: https://www.nrel.gov/docs/fy21osti/79236.pdf
-Battery.Eff         = 0.9;                  % Round trip efficiency [%]
+Battery.Eff         = 0.90;                  % Round trip efficiency [%]
 
-inputs.Li_p   = 0.182;    % [EUR/Wh] source: https://www.nrel.gov/docs/fy21osti/79236.pdf
 inputs.Li_N = 1e4;        % [lifetime cycles]
 inputs.Li_n = 10;         % [Lifetime years]
 
@@ -61,6 +60,8 @@ inputs.ultracap_N = 1e6;    % [cycles]
 
 Battery.Minimum     = 0.1*Battery.Size;     % state of charge lower limit strage system [Wh]
 Battery.Maximum     = 0.9*Battery.Size;     % state of charge upper limit strage system [Wh]
+
+
 
 
 %% Resource inputs
@@ -106,6 +107,37 @@ inputs.Pmi = [0	0	322.189763185042	-2.17062794576475e-09	123.115682108622	2565.3
 inputs.ti = [0	0	11.7879399982055	9.79979992755704	11.5450234403218	14.7365958129790	19.0157158771206	19.0158163029256	19.0175434666360	19.0195942145906	19.0211752356336	19.0224483791143	19.0234898353332	19.0243666537505	19.0251178273151	19.0256153900686	19.0255683228229	19.0252316629346	19.0150625316568]; %s
 
 
+Kite.Pcurvefit     = linspace(0,25,26)';   % Wind speed range for curve fit
+                                   
+Kite.Pcurvefit1      = fit(Kite.Pcurvefit(4:10),inputs.kite_Pcurve(4:10),'poly5');  % For wind speed between cut-in and rated m/s 
+Kite.Coeffs     = coeffvalues(Kite.Pcurvefit1);
+
+Kite.Power1  = zeros(length(inputs.vw),1); 
+for i = 1:length(inputs.vw)
+  for vw = 1:length(inputs.kite_Pcurve)
+
+    if inputs.vw(i) >= 4 && inputs.vw(i) <= 10
+
+        Kite.Power1(i) = polyval(Kite.Coeffs,inputs.vw(i));
+
+    elseif inputs.vw(i) >10
+
+        Kite.Power1(i) = inputs.kite_Pcurve(10);
+
+    else 
+
+        Kite.Power1(i) = inputs.kite_Pcurve(1);
+
+    end
+
+  end
+end
+
+Kite.aboverated = Kite.Power1>1e5;
+Kite.Power1(Kite.aboverated) = 1e5; 
+
+
+
 Kite.Power  = zeros(length(inputs.vw),1);                    % [W]
 for i = 1:length(inputs.vw)
   for vw = 1:length(inputs.kite_Pcurve)
@@ -117,9 +149,9 @@ for i = 1:length(inputs.vw)
   end
 end
 
-Kite.CF = sum(Kite.Power)/(100e3*8760);
+Kite.CF = sum(Kite.Power1)/(100e3*8760);
 Battery.Preq = round(max(abs(inputs.P_e_inst-max(inputs.kite_Pcurve/1e3))),0)*1e3;                         %1C charge limit battery power [W]
-
+Kite.sort = sort(Kite.Power1/1e3);
 
 %% AWE Smoothing storage 
 % Calculations for the smoothing Energy and Power at each timestep of the
@@ -142,7 +174,7 @@ for i = 1:length(inputs.vw)                         % Smoothing intermediate sto
   end
 end
 
-Battery.Psm = (Battery.Preq/max(Kite.Power))*Kite.Power;
+Battery.Psm = (Battery.Preq/max(Kite.Power1))*Kite.Power1;
 
 
 Battery.DoD(isnan(Battery.DoD))=0;
@@ -153,8 +185,8 @@ Battery.DoD(isnan(Battery.DoD))=0;
 
 AWEultracap.cap = (1.1*(max(inputs.storageExchange)));
 AWEultracap.f_repl = sum(Battery.DoD/1e3)/AWEultracap.cap/inputs.ultracap_N;  % frequency of replacement ultracap system [/year]
-AWEultracap.KiteE = sum(Kite.Power/1e6);                   % sold kite power [MWh]
-AWEultracap.R = sum((inputs.DAMp + Cost.Subsidy) .* (Kite.Power/1e6),"omitnan");
+AWEultracap.KiteE = sum(Kite.Power1/1e6);                   % sold kite power [MWh]
+AWEultracap.R = sum((inputs.DAMp + Cost.Subsidy) .* (Kite.Power1/1e6),"omitnan");
 
 
 %% Scenario 2 AWE + Battery
@@ -256,7 +288,7 @@ AWEarb.C(8760) = 0;
 AWEarb.f_repl = max( 1/inputs.Li_n,(sum(abs(AWEarb.C)*1e3) + sum(Battery.DoD))/(Battery.Size*inputs.Li_N));  % frequency of replacement Battery system [/year]
 
 AWEarb.battE = sum(abs(min(AWEarb.C,0)))/1e3;      % discharged energy by battery [MWh]
-AWEarb.KiteE = sum(Kite.Power/1e6);                % sold kite power [MWh]
+AWEarb.KiteE = sum(Kite.Power1/1e6);               % sold kite power [MWh]
 AWEarb.E = AWEarb.battE + AWEarb.KiteE;
 
 
@@ -270,7 +302,7 @@ AWEarb.R = AWEarb.Rbatt + AWEarb.Rkite;
 
 
 
-% Economic metrics
+%% Economic metrics
 % Performance metrics calculations of each scenario in order to analyse and
 % compare economic viability
 
@@ -284,8 +316,8 @@ Cost.r = inputs.business.DtoE/(1+ inputs.business.DtoE)*inputs.business.r_d*(1-i
 
 
 
-Cost.Kite.ICC = 350e3;      % Capital cost kite system without intermediate storage, 439 from AWE-Eco, 150 from Sweder
-Cost.Kite.OMC = 10e3;       % Operational cost kite system without intermediate storage, 12.2 from AWE-eco, 40 from Sweder
+Cost.Kite.ICC = 439e3;      % Capital cost kite system without intermediate storage, 439 from AWE-Eco, 150 from Sweder
+Cost.Kite.OMC = 12.2e3;       % Operational cost kite system without intermediate storage, 12.2 from AWE-eco, 40 from Sweder
 
 AWEultracap.CAPEX = inputs.ultracap_p*1.1*(max(inputs.storageExchange)) + Cost.Kite.ICC ;       % Capital expenditures ultracap component [EUR]
 AWEultracap.OPEX = AWEultracap.f_repl*1.1*(max(inputs.storageExchange))*inputs.ultracap_p + Cost.Kite.OMC;                       % Operational expenditures ultracap component [EUR]
@@ -313,7 +345,7 @@ AWEbat.NPV = NPV(Cost.r,AWEultracap.R,AWEbat.CAPEX,AWEbat.OPEX, inputs.business.
 
 [AWEarb.LCoE, AWEarb.LRoE, AWEarb.LPoE, AWEarb.NPV1] = EcoMetrics(Cost.r,AWEarb.R,AWEarb.E,AWEarb.CAPEX,AWEarb.OPEX, inputs.business.N_y);
 AWEarb.NPV = NPV(Cost.r,AWEarb.R,AWEarb.CAPEX,AWEarb.OPEX, inputs.business.N_y);
-[AWEarb.IRR,~] = fsolve(@(r) NPV2(r,AWEarb.R,AWEarb.E,AWEarb.CAPEX,AWEarb.OPEX, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[AWEarb.IRR,~] = fsolve(@(r) NPV(r,AWEarb.R,AWEarb.CAPEX,AWEarb.OPEX, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 [AWEarb.LF, AWEarb.VoSA] = StorageMetrics(AWEarb.Rbatt,AWEarb.C,Battery.Size,Battery.Type);
 
 [BESS.LCoS, BESS.LRoS, BESS.LPoS, BESS.NPV1] = EcoMetrics(Cost.r,BESS.R,BESS.E,BESS.CAPEX,BESS.OPEX, inputs.business.N_y);
@@ -322,7 +354,7 @@ BESS.NPV = NPV(Cost.r,BESS.R,BESS.CAPEX,BESS.OPEX, inputs.business.N_y);
 [BESS.LF, BESS.VoSA] = StorageMetrics(BESS.R,BESS.C,BESS.Size,Battery.Type);
 
 [Battarb.LCoS, Battarb.LRoS, Battarb.LPoS, Battarb.NPV1] = EcoMetrics(Cost.r,Battarb.R,Battarb.E,BESS.CAPEX,BESS.OPEX, inputs.business.N_y);
-[Battarb.IRR,~] = fsolve(@(r) NPV2(r,Battarb.R,Battarb.E,BESS.CAPEX,BESS.OPEX, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[Battarb.IRR,~] = fsolve(@(r) NPV(r,Battarb.R,BESS.CAPEX,BESS.OPEX, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 [Battarb.LF, Battarb.VoSA] = StorageMetrics(Battarb.R,Battarb.C,BESS.Size,Battery.Type);
 
 
@@ -333,12 +365,10 @@ AWEarbit.NPV = NPV(Cost.r,AWEarbit.R,AWEarbit.CAPEX,AWEarbit.OPEX, inputs.busine
 
 
 disp('---------------------------------------------------------')
-disp(['window = ',num2str(round(AWEarb.w)),' hrs'])
-disp(['threshold = ',num2str(round(AWEarb.var,2)),' -'])
-disp(['NPV = ',num2str(round(AWEarbit.NPV/1e3)),' k€'])
-disp(['IRR = ',num2str(round(AWEarbit.IRR*1e2,2)),' %'])
-disp(['VoSA = ',num2str(round(AWEarbit.VoSA,2)),' k€'])
-disp(['Battery profit = ',num2str(round(AWEarbit.Rbatt - (AWEarbit.f_repl - sum(Battery.DoD)/(Battery.Preq*inputs.Li_N))*Battery.Size*Cost.BatteryPrice(Battery.prog))),' €'])
+% disp(['Scenario 1 IRR = ',num2str(round(AWEultracap.IRR*1e2,2)),' %'])
+% disp(['Scenario 2 IRR = ',num2str(round(AWEbat.IRR*1e2,2)),' %'])
+disp(['Scenario 4 Edisch = ',num2str(round(AWEarbit.E,4)),' MWh'])
+disp(['Scenario 4 IRR = ',num2str(round(AWEarbit.IRR*1e2,4)),' %'])
 
 
 
@@ -386,51 +416,108 @@ disp(['Battery profit = ',num2str(round(AWEarbit.Rbatt - (AWEarbit.f_repl - sum(
 
 %% AWE performance plotting
 % 
-figure('units', 'normalized', 'outerposition', [0 0.5 0.45 0.4])
+% figure('units', 'normalized', 'outerposition', [0 0.5 0.45 0.4])
 
 % Powercurve 100 kW AWE
+% 
+% inputs.kite_Pcurve(22:25) = zeros(1,4);
+% 
+% plot(1:length(inputs.kite_Pcurve),inputs.kite_Pcurve/1e3,'LineWidth',1.5, 'color', '#0D3B66')
+%     hold on
+% plot(1:length(inputs.kite_Pcurve),inputs.kite_Pcurve/1e3,'.','MarkerSize',15, 'color', '#0D3B66')
+%     title('AWE Power curve 100 kW system','FontSize',10,'FontWeight', 'Bold')
+%     xlim([0 25])
+%     ylim([0 1.4*max(inputs.kite_Pcurve)/1e3])
+%     ylabel('Power [kW]','FontSize',8,'FontWeight', 'Bold')
+% %     legend('P_{e, avg}','Location','northeast','FontSize',8,'NumColumns',1);
+%     xlabel('Wind speed at 100 m (m/s)','FontSize',8,'FontWeight', 'Bold')
+% %     legend('boxoff')
+% grid on
+% hold off
 
-inputs.kite_Pcurve(22:25) = zeros(1,4);
-
-plot(1:length(inputs.kite_Pcurve),inputs.kite_Pcurve/1e3,'LineWidth',1.5, 'color', '#0D3B66')
-    hold on
-plot(1:length(inputs.kite_Pcurve),inputs.kite_Pcurve/1e3,'.','MarkerSize',15, 'color', '#0D3B66')
-    title('AWE Power curve 100 kW system','FontSize',10,'FontWeight', 'Bold')
-    xlim([0 25])
-    ylim([0 1.4*max(inputs.kite_Pcurve)/1e3])
-    ylabel('Power [kW]','FontSize',8,'FontWeight', 'Bold')
-%     legend('P_{e, avg}','Location','northeast','FontSize',8,'NumColumns',1);
-    xlabel('Wind speed at 100 m (m/s)','FontSize',8,'FontWeight', 'Bold')
-%     legend('boxoff')
-grid on
-hold off
-
-% bar(1:length(Kite.Power),Kite.Power/1e3, 'FaceColor', '#355070')
+% bar(1:length(Kite.Power),Kite.Power1/1e3, 'FaceColor', '#355070')
 %     box off
 %     set(gca,'xtick',round(linspace(365,8760-365,12)),'xticklabel',...
 %         {'Jan','Feb','Mar','Apr','May','Jun','Jul', ...
 %         'Aug','Sep','Oct','Nov','Dec'})
-%     title('hourly AWE power hourly over full year ','FontSize',10,'FontWeight', 'Bold')
+%     title('AWE power output hourly over full year ','FontSize',10,'FontWeight', 'Bold')
 %     xlim([0 length(inputs.vw)])
-%     ylim([0 1.1*max(Kite.Power/1e3)])
+%     ylim([0 1.1*max(Kite.Power1/1e3)])
 %     ylabel('Power [kW]','FontSize',8,'FontWeight', 'Bold')
 %     xtickangle(45)
 % hold off
 % 
-% figure()  % Reeling power 100 kW AWE
-% 
-% plot([0 1 43 45 51 65 66.7],inputs.P_e_inst,'LineWidth',1, 'color', '#0D3B66')
-%     hold on
-%     yline(100,'-.k','LineWidth',1);
-%     plot([51 51],[-39.7295922699621 100],'LineWidth',1.5, 'color', '#EE964B')
-%     title('Cyle power at rated wind speed','FontSize',10,'FontWeight', 'Bold')
-%     xlim([0 66.7])
-%     ylim([1.3*min(inputs.P_e_inst) 1.3*max(inputs.P_e_inst)])
-%     ylabel('Power [kW]','FontSize',8,'FontWeight', 'Bold')
-%     legend('P_{Cycle}','P_{Rated}','P_{Smoothing, max}','Location','northeast','FontSize',10,'NumColumns',1);
-%     xlabel('Time withing cycle (s)','FontSize',8,'FontWeight', 'Bold')
+figure()  % Reeling power 100 kW AWE
+
+    hold on
+    yline(0,'-k','LineWidth',0.5);
+    plot([0 1 43 45 51 65 66.7],inputs.P_e_inst,'LineWidth',1, 'color', 'k')
+
+    yline(100,'--','LineWidth',1.5, 'color', '#40376E');
+    text(66.7,100,'  P_{e, avg}','FontSize',10);
+    
+    plot([43 66.7],[137.209 137.209],'LineWidth',1.5, 'LineStyle',"--" ,'color', '#1F936C')
+    plot(43,137.209,'.','MarkerSize',20,'color', '#1F936C')
+    text(66.7,137.209,'  P_{e, o, peak}','FontSize',10);
+
+    plot([51 66.7],[-39.7296 -39.7296],'LineWidth',1.5, 'LineStyle',"--" , 'color', '#DF7355')
+    plot(51,-39.7296,'.','MarkerSize',20,'color', '#DF7355')
+    title('Reeling power over one cycle at rated wind speed','FontSize',12,'FontWeight', 'Bold')
+    text(66.7,-39.7296,'  P_{e, i, peak}','FontSize',10);
+
+    xlim([0 66.7])
+    ylim([1.3*min(inputs.P_e_inst) 1.3*max(inputs.P_e_inst)])
+    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     legend('P_{e}','P_{e, avg}','P_{Smoothing, max}','Location','northeast','FontSize',10,'NumColumns',1);
+    xlabel('Time withing cycle (s)','FontSize',10,'FontWeight', 'Bold')
 %     legend('boxoff')
-% hold off
+hold off
+
+
+
+figure()  % Reeling energy 100 kW AWE
+
+    hold on
+    
+    
+    area([0 1 43] ,inputs.P_e_inst(1:3), 'FaceColor', '#1F936C')
+    area([43 43.5424] ,[137.209 100], 'FaceColor', '#1F936C')
+    area([0.1 43.5424] ,[100 100], 'FaceColor', '#FFFFFF')
+    text(43,120,'  \leftarrow  E_{e, o} -  E_{e, avg}','FontSize',10);
+
+    area([45 51 65 66.7] ,inputs.P_e_inst(4:7), 'FaceColor', '#DF7355')
+    area([45 51 65] ,[100 100 100], 'FaceColor', '#DF7355')
+    area([43.5424 45] ,[100 100], 'FaceColor', '#DF7355')
+    area([43.5424 45] ,[100 0], 'FaceColor', '#FFFFFF')
+    text(43,40,'  E_{e, i} +  E_{e, avg} \rightarrow','FontSize',10,'HorizontalAlignment','right');
+    yline(0,'-k','LineWidth',0.5);
+
+
+    yline(100,'--','LineWidth',2.5, 'color', '#40376E');
+    text(66.7,100,'  P_{e, avg}','FontSize',10);
+
+    title('Reeling energy over one cycle at rated wind speed','FontSize',12,'FontWeight', 'Bold')
+    xlim([0 66.7])
+    ylim([1.3*min(inputs.P_e_inst) 1.3*max(inputs.P_e_inst)])
+    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     legend('P_{e}','P_{e, avg}','P_{Smoothing, max}','Location','northeast','FontSize',10,'NumColumns',1);
+    xlabel('Time withing cycle (s)','FontSize',10,'FontWeight', 'Bold')
+%     legend('boxoff')
+hold off
+
+% figure('Name','Kite power sorted','units', 'normalized', 'outerposition', [0 0.5 0.45 0.4])
+
+
+
+% plot(1:length(Kite.sort),Kite.sort,'LineWidth',1.5, 'color', '#0D3B66')
+%     xlim([0 length(Kite.sort)])
+%     ylim([0 1.4*max(Kite.sort)])
+%     xlabel('Hours of year','FontSize',8,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',8,'FontWeight', 'Bold')
+%     title('AWE power output sorted in ascending order','FontSize',10,'FontWeight', 'Bold')
+%     xticks(365+730*(0:1:12))
+%     xticklabels({'365','1095','1825','2555','3285','4015','4745','5475','6205','6935','7665','8395'})
+
 
 
 %% Battery performance plots
@@ -470,21 +557,21 @@ hold off
 
 % ultracap
 
-figure('Name','Ultracap performance excess capacity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% figure('Name','Ultracap performance excess capacity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
 % 
 % % subplot(1,2,1);                 % Excess Energy         
-    bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*AWEultracap.cap*1e3)/1e3, 'FaceColor', '#564D80')
-    hold on
-    area(1:length(Battery.Smoothing/1e3),ones(1,length(Battery.Smoothing))*0.1*AWEultracap.cap, 'FaceColor', '#FFFFFF')
-    yline(1.1*AWEultracap.cap,'-','100 %','FontSize',10);
-    yline(0.1*AWEultracap.cap,'-','0 %','LabelVerticalAlignment','bottom','FontSize',10 );
-    ylim([0 1.2*AWEultracap.cap])
-    xlim([5950 5950+24*14])
-    xticks((5950+12)+(0:24:(336-12)))
-    xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
-    title('Smoothing energy reserved capacity','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*AWEultracap.cap*1e3)/1e3, 'FaceColor', '#564D80')
+%     hold on
+%     area(1:length(Battery.Smoothing/1e3),ones(1,length(Battery.Smoothing))*0.1*AWEultracap.cap, 'FaceColor', '#FFFFFF')
+%     yline(1.1*AWEultracap.cap,'-','100 %','FontSize',10);
+%     yline(0.1*AWEultracap.cap,'-','0 %','LabelVerticalAlignment','bottom','FontSize',10 );
+%     ylim([0 1.2*AWEultracap.cap])
+%     xlim([5950 5950+24*14])
+%     xticks((5950+12)+(0:24:(336-12)))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     title('Smoothing energy reserved capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
 %     legend('Smoothing Energy','Location','northeastoutside','FontSize',8,'NumColumns',1);
 %     legend('boxoff')
 
@@ -501,7 +588,7 @@ figure('Name','Ultracap performance excess capacity','units', 'normalized', 'out
 % %     legend('Smoothing Energy','Location','northeastoutside','FontSize',8,'NumColumns',1);
 % %     legend('boxoff')
 
-figure('Name','Arbitrage Battery operation','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% figure('Name','Arbitrage Battery operation','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
 
 
 
@@ -532,21 +619,171 @@ figure('Name','Arbitrage Battery operation','units', 'normalized', 'outerpositio
 %     hold off
 
 
-    bar(1:length(Kite.Power/1e3),Kite.Power/1e3, 'FaceColor', '#B3DCE7')
+%     bar(1:length(Kite.Power/1e3),Kite.Power/1e3, 'FaceColor', '#B3DCE7')
+%     hold on
+%     bar(1:length(AWEarbit.C),max(AWEarbit.C,0), 'FaceColor', '#DE8F6E')
+%     bar(1:length(AWEarbit.C),abs(min(AWEarbit.C,0)), 'FaceColor', '#88AB75')
+%     ylim([0 1.3*abs(max(AWEarbit.C))])
+%     xlim([5950 5950+24*14])
+%     xticks((5950+12)+(0:24:(336-12)))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     title('AWE + Battery arbitrage power','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+%     legend('AWE power','Battery charge','Battery discharge', 'AWE power','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%     set(gca,'TickLength',[0 0]);
+%     hold off
+
+%% Arbitrage operation plots
+
+figure()  % Arbitrage model
+
     hold on
-    bar(1:length(AWEarbit.C),max(AWEarbit.C,0), 'FaceColor', '#DE8F6E')
-    bar(1:length(AWEarbit.C),abs(min(AWEarbit.C,0)), 'FaceColor', '#88AB75')
-    ylim([0 1.3*abs(max(AWEarbit.C))])
-    xlim([5950 5950+24*14])
-    xticks((5950+12)+(0:24:(336-12)))
-    xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
-    title('AWE + Battery arbitrage power','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
-    legend('AWE power','Battery charge','Battery discharge', 'AWE power','Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-    set(gca,'TickLength',[0 0]);
-    hold off
+    yline(0,'-k','LineWidth',0.5);
+    plot((0:10),[25 28 35 56 32 11 21 36 34 29 35],'LineWidth',1, 'color', 'k')
+
+    yline(mean([25 28 35 56 32 11 21 36 34 29 35]),'--','LineWidth',1.5, 'color', '#40376E');
+    text(10,mean([25 28 35 56 32 11 21 36 34 29 35]),' \mu_{DAM, w}','FontSize',12);
+
+    yline(1.25*mean([25 28 35 56 32 11 21 36 34 29 35]),'--','LineWidth',1.5, 'color', '#40376E');
+    text(6.5,1.33*mean([25 28 35 56 32 11 21 36 34 29 35]),' (1 + \sigma_{DAM}) \mu_{DAM, w}','FontSize',12);
+
+    yline(0.75*mean([25 28 35 56 32 11 21 36 34 29 35]),'--','LineWidth',1.5, 'color', '#40376E');
+    text(6.5,0.67*mean([25 28 35 56 32 11 21 36 34 29 35]),' (1 - \sigma_{DAM}) \mu_{DAM, w}','FontSize',12);
+    
+
+    plot(3,56,'.','MarkerSize',20,'color', 'r')
+    text(3,56,'  \leftarrow E_{t+1} - E_{t} =  - P_{max}','FontSize',14);
+
+    plot(5,11,'.','MarkerSize',20,'color', 'r')
+    text(5,11,'  \leftarrow E_{t+1} - E_{t} =  P_{max}','FontSize',14);
+
+    xlim([0 10])
+    ylim([5 60])
+    ylabel('Price [EUR]','FontSize',10,'FontWeight', 'Bold')
+%     legend('P_{e}','P_{e, avg}','P_{Smoothing, max}','Location','northeast','FontSize',10,'NumColumns',1);
+    xlabel('Time (hr)','FontSize',10,'FontWeight', 'Bold')
+%     legend('boxoff')
+hold off
+
+% figure('Name','Storage arbitrage window operation','units', 'normalized', 'outerposition', [0.5 0.05 0.5 0.6])
+% 
+%   subplot(2,1,1);
+%                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'color', '#DFB4BE')
+%     title('Battery arbitrage charging behavior','FontSize',10,'FontWeight', 'Bold')
+%     xlim([5898 5898+24])
+%     ylim([20 60])
+%     set(gca,'TickLength',[0 0],'XTick',[]);
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+%     legend('DAM price','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+% 
+% 
+%     subplot(2,1,2);                   % Battery charge/discharge power
+% 
+%     bar(1:length(Battarb.C),abs(min(Battarb.C,0)), 'FaceColor', '#DE8F6E')
+%     hold on
+%     bar(1:length(Battarb.C),abs(max(Battarb.C,0)), 'FaceColor', '#88AB75')
+% %     yline(BESS.Size/1e3,'-','1 C');
+% %     yline(BESS.Size/2e3,'-','0.5 C');
+% %     yline(-BESS.Size/1e3,'-','-1 C');
+% %     yline(-BESS.Size/2e3,'-','-0.5 C');
+%     ylim([0 1.6*max(Battarb.C)])
+%     xlim([5898 5898+24])
+%     xticks((5898)+(2:2:24))
+%     xticklabels({'1hr','2hrs','3hrs','4hrs','5hrs','6hrs','7hrs','8hrs','9hrs','10hrs','11hrs','12hrs'})
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Time ','FontSize',10,'FontWeight', 'Bold')
+% %     title('Battery arbitrage charging behavior in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     legend('Discharge to Grid', 'Charge from Grid','Location','northeastoutside','FontSize',8,'NumColumns',2);
+%     legend('boxoff')
+%     hold off
+% 
+% figure('Name','Storage arbitrage behavior','units', 'normalized', 'outerposition', [0.5 0.05 0.5 0.6])
+% 
+%   subplot(2,1,1);
+%                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'color', '#DFB4BE')
+%     title('Battery arbitrage charging behavior','FontSize',10,'FontWeight', 'Bold')
+%     xlim([5898 5898+2*24])
+%     ylim([20 60])
+%     set(gca,'TickLength',[0 0],'XTick',[]);
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+%     legend('DAM price','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+% 
+% 
+%     subplot(2,1,2);                   % Battery charge/discharge power
+% 
+%     bar(1:length(Battarb.C),abs(min(Battarb.C,0)), 'FaceColor', '#DE8F6E')
+%     hold on
+%     bar(1:length(Battarb.C),abs(max(Battarb.C,0)), 'FaceColor', '#88AB75')
+% %     yline(BESS.Size/1e3,'-','1 C');
+% %     yline(BESS.Size/2e3,'-','0.5 C');
+% %     yline(-BESS.Size/1e3,'-','-1 C');
+% %     yline(-BESS.Size/2e3,'-','-0.5 C');
+%     ylim([0 1.6*max(Battarb.C)])
+%     xlim([5898 5898+2*24])
+%     xticks((5898)+(10:8:2*24))
+%     xticklabels({'w','2w','3w','4w','5w','6w','7w','8w','9w','10w','11w','12w'})
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Arbitrage window within one day','FontSize',10,'FontWeight', 'Bold')
+% %     title('Battery arbitrage charging behavior in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     legend('Discharge to Grid', 'Charge from Grid','Location','northeastoutside','FontSize',8,'NumColumns',2);
+%     legend('boxoff')
+%     hold off
+
+% 
+%    figure('Name','Storage arbitrage combined smoothing','units', 'normalized', 'outerposition', [0.5 0.05 0.5 0.6])
+%   
+% 
+%     subplot(2,1,1);
+ 
+%                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',0.2, 'color', '#DFB4BE')
+%     title('Bidding operation AWE smoothing and arbitrage over one week','FontSize',10,'FontWeight', 'Bold')
+%     xlim([2600 2600+24*7])
+%     ylim([0 70])
+%     set(gca,'TickLength',[0 0],'XTick',[]);
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     legend('DAM price','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+
+
+%                       % SoC
+%     plot(1:length(inputs.DAMp),(AWEarbit.Batt/Battery.Size)*100,'LineWidth',1.5, 'color', '#DFB4BE')
+%     title('Bidding operation AWE smoothing and arbitrage over one week','FontSize',10,'FontWeight', 'Bold')
+%     xlim([2600 2600+24*7])
+%     ylim([0 100])
+%     set(gca,'TickLength',[0 0],'XTick',[]);
+%     ylabel('SoC [%]','FontSize',10,'FontWeight', 'Bold')
+% %     legend('State of Charge','Location','northeastoutside','FontSize',8,'NumColumns',1);
+% %     legend('boxoff')
+% 
+% 
+%    subplot(2,1,2);                   % Battery power types
+%  
+%     hold on
+%     bar(1:length(AWEarb.C),0.98*(Battery.Preq/max(Kite.Power1))*Kite.Power1/1e3+ abs(max(AWEarbit.C,0)), 'FaceColor', '#88AB75')
+%     bar(1:length(AWEarb.C),0.98*(Battery.Preq/max(Kite.Power1))*Kite.Power1/1e3+ abs(min(AWEarbit.C,0)), 'FaceColor', '#DE8F6E')
+%     bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power1))*Kite.Power1/1e3, 'FaceColor', '#564D80')
+%     yline(Battery.Size/1e3,'-','    1 C','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+%     ylim([0 1.4*Battery.Size/1e3])
+%     xlim([2600 2600+24*7])
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     legend('Charged from grid','Discharged to grid', 'Smoothing Power','Location','northeastoutside','FontSize',8,'NumColumns',3);
+%     legend('boxoff')
+%     xticks((2600)+(12:24:24*7))
+%     xticklabels({'M','T','W','T','F','S','S'})
+% hold off
+
 
 
 
@@ -556,250 +793,614 @@ figure('Name','Arbitrage Battery operation','units', 'normalized', 'outerpositio
 
 %% Plots Scenario 1 AWE ultracap
 
-figure('Name','Scenario 1 AWE+ultracap','units', 'normalized', 'outerposition', [0 0.6 0.5 0.5]);
+% figure('Name','Scenario 1 AWE+ultracap','units', 'normalized', 'outerposition', [0 0.6 0.5 0.5]);
+% 
+% %   subplot(2,1,1);
+% % 
+% %   hold on
+% %   str_2_print = sprintf(['AWE + Ultracapacitor\n\n' ...
+% %       'LCoE = %.0f EUR/MWh\n' ...
+% %       'LPoE = %.1f EUR/MWh\n' ...
+% %       'IRR = %.3f percent\n' ...
+% %       'Produced energy = %.0f MWh\n' ...
+% %       ], ...
+% %       AWEultracap.LCoE, AWEultracap.LPoE, AWEultracap.IRR*1e2, AWEultracap.KiteE);  
+% % 
+% %   text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
+% %   axis off
+% % 
+% %   subplot(2,1,2);
+% 
+%     yyaxis left                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp(4380:4716)),inputs.DAMp(4380:4716),'LineWidth',0.2, 'color', '#DFB4BE')
+%     title('AWE produced power over DAM price in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     xlim([0 length(inputs.DAMp(4380:4716))])
+%     ylim([20 60])
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+% 
+% 
+%     yyaxis right                    % Produced Kite power
+% 
+%     area(1:length(Kite.Power(4380:4716)/1e3),Kite.Power(4380:4716)/1e3, 'FaceColor', '#577399')
+%     ylim([0.9*min(Kite.Power(4380:4716)/1e3) 1.2*max(Kite.Power(4380:4716)/1e3)])
+%     xlim([0 length(Kite.Power(4380:4716)/1e3)])
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
+%     ax = gca;
+%     ax.YAxis(1).Color = 'k';
+%     ax.YAxis(2).Color = 'k';
+%     hold off
 
-  subplot(2,1,1);
+% figure('Name','Scanario 1 excess capacity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
 
-  hold on
-  str_2_print = sprintf(['AWE + Ultracapacitor\n\n' ...
-      'LCoE = %.0f EUR/MWh\n' ...
-      'LPoE = %.1f EUR/MWh\n' ...
-      'IRR = %.3f percent\n' ...
-      'Produced energy = %.0f MWh\n' ...
-      ], ...
-      AWEultracap.LCoE, AWEultracap.LPoE, AWEultracap.IRR*1e2, AWEultracap.KiteE);  
+% subplot(3,1,1);                 % Excess Energy         
+%     bar(1:length(Battery.DoD/1e3),Battery.Smoothing/1e3+0.1*AWEultracap.cap, 'FaceColor', '#564D80')
+%     hold on
+%     area(1:length(Battery.Smoothing/1e3),ones(1,length(Battery.Smoothing))*0.1*AWEultracap.cap, 'FaceColor', '#FFFFFF')
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     yline(AWEultracap.cap*1.1,'-','100 %','LabelVerticalAlignment','bottom' );
+%     yline(0.1*AWEultracap.cap,'-','0 %','LabelVerticalAlignment','top' );
+%     ylim([0 1.2*AWEultracap.cap])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing energy use of Ultracapacitor capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[],'YTick',[]);
+% hold off
 
-  text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
-  axis off
-
-  subplot(2,1,2);
-
-    yyaxis left                       % DAM  2019
-
-    plot(1:length(inputs.DAMp(4380:4716)),inputs.DAMp(4380:4716),'LineWidth',0.2, 'color', '#DFB4BE')
-    title('AWE produced power over DAM price in two summer weeks','FontSize',10,'FontWeight', 'Bold')
-    xlim([0 length(inputs.DAMp(4380:4716))])
-    ylim([20 60])
-    ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
-
-
-    yyaxis right                    % Produced Kite power
-
-    area(1:length(Kite.Power(4380:4716)/1e3),Kite.Power(4380:4716)/1e3, 'FaceColor', '#577399')
-    ylim([0.9*min(Kite.Power(4380:4716)/1e3) 1.2*max(Kite.Power(4380:4716)/1e3)])
-    xlim([0 length(Kite.Power(4380:4716)/1e3)])
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
-    ax = gca;
-    ax.YAxis(1).Color = 'k';
-    ax.YAxis(2).Color = 'k';
-    hold off
+% subplot(3,1,2);             % Excess Power 
+%     bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power))*Kite.Power/1e3, 'FaceColor', '#B2675E')
+%     hold on
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     yline(AWEultracap.cap*200,'-','200 C');
+%     ylim([0 AWEultracap.cap*220])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing power use of ultracapacitor power limit','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[],'XTick',[]);
+% hold off
+% 
+% subplot(3,1,3);   % DAM price
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'Color', '#C59FC9')
+%     hold on
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     ylim([15 75])
+%     xlim([5950 5950+24*14])
+%     xticks((5950+12)+(0:24:(336-12)))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     title('DAM price','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0]);
+% hold off
 
 
 
 
 %% Plots Scenario 2 AWE Battery
 
-figure('Name','Scanario 2 AWE-Batt','units', 'normalized', 'outerposition', [0.5 0.6 0.5 0.5]);
+% figure('Name','Scanario 2 AWE-Batt','units', 'normalized', 'outerposition', [0.5 0.6 0.5 0.5]);
+% 
+%   subplot(2,1,1);
+% 
+%   hold on
+%   str_2_print = sprintf(['AWE + Battery\n\n' ...
+%       'LCoE = %.0f EUR/MWh\n' ...
+%       'LPoE = %.1f EUR/MWh\n' ...
+%       'IRR = %.3f percent\n' ...
+%       'Produced energy = %.0f MWh\n' ...
+%       ], ...
+%       AWEbat.LCoE, AWEbat.LPoE, AWEbat.IRR*1e2, AWEultracap.KiteE);  
+% 
+%   text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
+%   axis off
+% 
+%   subplot(2,1,2);
+% 
+%     yyaxis left                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp(4380:4716)),inputs.DAMp(4380:4716),'LineWidth',0.2, 'color', '#DFB4BE')
+%     title('Kite power in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     xlim([0 length(inputs.DAMp(4380:4716))])
+%     ylim([20 60])
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+% 
+% 
+%     yyaxis right                    % Produced Kite power
+% 
+%     area(1:length(Kite.Power(4380:4716)/1e3),Kite.Power(4380:4716)/1e3, 'FaceColor', '#577399')
+%     ylim([0.9*min(Kite.Power(4380:4716)/1e3) 1.2*max(Kite.Power(4380:4716)/1e3)])
+%     xlim([0 length(Kite.Power(4380:4716)/1e3)])
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
+%     ax = gca;
+%     ax.YAxis(1).Color = 'k';
+%     ax.YAxis(2).Color = 'k';
+%     hold off
 
-  subplot(2,1,1);
-
-  hold on
-  str_2_print = sprintf(['AWE + Battery\n\n' ...
-      'LCoE = %.0f EUR/MWh\n' ...
-      'LPoE = %.1f EUR/MWh\n' ...
-      'IRR = %.3f percent\n' ...
-      'Produced energy = %.0f MWh\n' ...
-      ], ...
-      AWEbat.LCoE, AWEbat.LPoE, AWEbat.IRR*1e2, AWEultracap.KiteE);  
-
-  text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
-  axis off
-
-  subplot(2,1,2);
-
-    yyaxis left                       % DAM  2019
-
-    plot(1:length(inputs.DAMp(4380:4716)),inputs.DAMp(4380:4716),'LineWidth',0.2, 'color', '#DFB4BE')
-    title('Kite power in two summer weeks','FontSize',10,'FontWeight', 'Bold')
-    xlim([0 length(inputs.DAMp(4380:4716))])
-    ylim([20 60])
-    ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
-
-
-    yyaxis right                    % Produced Kite power
-
-    area(1:length(Kite.Power(4380:4716)/1e3),Kite.Power(4380:4716)/1e3, 'FaceColor', '#577399')
-    ylim([0.9*min(Kite.Power(4380:4716)/1e3) 1.2*max(Kite.Power(4380:4716)/1e3)])
-    xlim([0 length(Kite.Power(4380:4716)/1e3)])
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
-    ax = gca;
-    ax.YAxis(1).Color = 'k';
-    ax.YAxis(2).Color = 'k';
-    hold off
-
-figure('Name','Scanario 2 excess capacity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
-
-subplot(1,2,1);                 % Excess Energy         
-    bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*Battery.Size)/1e3, 'FaceColor', '#564D80')
-    hold on
-    bar(1:length(Battery.Smoothing/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
-    yline(0.2*Battery.Size/1e3,'-','20 %');
-    yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','bottom' );
-    ylim([10 1.1*0.2*Battery.Size/1e3])
-    xlim([5950 5950+24*14])
-    title('Smoothing energy capacity','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
-    legend('Smoothing Energy','Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-
-subplot(1,2,2);             % Excess Power 
-    bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power))*Kite.Power/1e3, 'FaceColor', '#B2675E')
-    hold on
-    yline(Battery.Size/1e3,'-','1 C');
-    ylim([0 1.2*Battery.Size/1e3])
-    xlim([5950 5950+24*14])
-    title('Smoothing power capacity','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
-    legend('Smoothing power','Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-
-%% Plots Scenario 3 AWE Battery arbitrage
-
-figure('Name','Scenario 3 AWE+Batt arbitrage','units', 'normalized', 'outerposition', [0 0.05 0.5 0.6])
-
-  subplot(2,1,1);
-
-  hold on
-  str_2_print = sprintf(['AWE + Battery seperate arbitrage\n\n' ...
-      'LCoE = %.0f EUR/MWh\n' ...
-      'LPoE = %.1f EUR/MWh\n' ...
-      'IRR = %.3f percent\n' ...
-      'Sold kite energy = %.0f MWh\n' ...
-      'Sold battery energy = %.0f MWh\n' ...
-      'Value of Arbitrage = %.0f kEUR/MW/year\n' ...
-      ], ...
-      AWEarb.LCoE, AWEarb.LPoE, AWEarb.IRR*1e2, AWEultracap.KiteE, AWEarb.battE,AWEarb.VoSA);  
-
-  text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
-  axis off
-
-  subplot(2,1,2);
-
-    yyaxis left                       % DAM  2019
-
-    plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',0.2, 'color', '#DFB4BE')
-    title('AWE and Battery power in two summer weeks','FontSize',10,'FontWeight', 'Bold')
-    xlim([4380 4716])
-    ylim([20 80])
-    ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+% figure('Name','Scanario 4 excess capacity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% 
+% subplot(3,1,1);                 % Excess Energy         
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*Battery.Size)/1e3, 'FaceColor', '#564D80')
+%     hold on
+%     area(1:length(Battery.Smoothing/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     yline(0.2*Battery.Size/1e3,'-','20 %');
+%     yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','top' );
+%     ylim([10 1.1*0.2*Battery.Size/1e3])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing energy use of battery capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+%     grid on
+% hold off
+% 
+% subplot(3,1,2);             % Excess Power 
+%     bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power))*Kite.Power/1e3, 'FaceColor', '#B2675E')
+%     hold on
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     yline(Battery.Size/1e3,'-','1 C');
+%     ylim([0 1.2*Battery.Size/1e3])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing power use of battery power limit','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+% hold off
+% 
+% subplot(3,1,3);   % DAM price
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'Color', '#C59FC9')
+%     hold on
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     ylim([15 75])
+%     xlim([5950 5950+24*14])
+%     xticks((5950+12)+(0:24:(336-12)))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     title('DAM price','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0]);
+% hold off
 
 
-    yyaxis right                    % Power2Grid flows
 
-    area(1:length(Kite.Power),Kite.Power/1e3, 'FaceColor', '#577399')
-    hold on
-    area(1:length(AWEarb.C),abs(min(AWEarb.C,0)), 'FaceColor', '#DE8F6E')
-    area(1:length(AWEarb.C),abs(max(AWEarb.C,0)), 'FaceColor', '#88AB75')
-    ylim([0 1.35*max(Kite.Power/1e3)])
-    xlim([4380 4716])
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
-    legend('Market price','Kite Power to Grid', 'Battery Power to Grid','Battery Power from Grid','Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-    ax = gca;
-    ax.YAxis(1).Color = 'k';
-    ax.YAxis(2).Color = 'k';
-    hold off
+%% Plots Scenario 3 Battery arbitrage
 
- figure('Name','Scanario 3 Battery limits','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
-
-subplot(1,2,1);                 % Excess Energy         
-    hold on
-    bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+AWEarb.Batt)/1e3, 'FaceColor', '#DE8F6E')
-    bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*Battery.Size)/1e3, 'FaceColor', '#564D80')
-    bar(1:length(Battery.DoD/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
-    yline(0.9*Battery.Size/1e3,'-','90 %');
-    yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','bottom' );
-    ylim([0 1.2*0.9*Battery.Size/1e3])
-    xlim([5950 5950+24*14])
-    title('Smoothing energy capacity','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
-    legend('Battery Arbitrage Energy','Smoothing Energy' ,'Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-
-subplot(1,2,2);             % Excess Power 
-    bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power))*Kite.Power/1e3, 'FaceColor', '#564D80')
-    hold on
-    bar(1:length(AWEarb.C),abs(min(AWEarb.C,0)), 'FaceColor', '#DE8F6E')
-    bar(1:length(AWEarb.C),abs(max(AWEarb.C,0)), 'FaceColor', '#88AB75')
-    yline(Battery.Size/1e3,'-','1 C');
-    ylim([0 1.2*Battery.Size/1e3])
-    xlim([5950 5950+24*14])
-    title('Smoothing power capacity','FontSize',10,'FontWeight', 'Bold')
-    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
-    legend('Smoothing power', 'Battery discharge power','Battery charge power','Location','northeastoutside','FontSize',8,'NumColumns',1);
-    legend('boxoff')
-    hold off
-
-
-%% Plots Scenario 4 Battery DAM standalone
 
 figure('Name','Scenario 4 Batt arbitrage','units', 'normalized', 'outerposition', [0.5 0.05 0.5 0.6])
+% 
+%   subplot(2,1,1);
+%   hold on
+%   str_2_print = sprintf(['Battery storage DAM arbitrage \n\n' ... ...
+%       'Battery size = %.0f kWh\n' ...
+%       'LCoS = %.0f EUR/MWh\n' ...
+%       'LPoS = %.0f EUR/MWh\n' ...
+%       'IRR = %.3f percent\n' ...
+%       'Discharged energy = %.0f MWh\n' ...
+%       'Value of Arbitrage = %.0f kEUR/MW/year\n' ...
+%       ], ...
+%       BESS.Size/1e3, BESS.LCoS,BESS.LPoS, BESS.IRR*1e2, BESS.E, BESS.VoSA);  
+%   text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
+%   axis off
+% 
+%   subplot(2,1,1);
+%                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',0.2, 'color', '#DFB4BE')
+%     title('Battery arbitrage charging behavior','FontSize',10,'FontWeight', 'Bold')
+%     xlim([5950 5950+24*14])
+%     ylim([20 80])
+%     set(gca,'TickLength',[0 0],'XTick',[]);
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+% %     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+%     legend('DAM price','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
 
-  subplot(2,1,1);
-  hold on
-  str_2_print = sprintf(['Battery storage DAM arbitrage \n\n' ... ...
-      'Battery size = %.0f kWh\n' ...
-      'LCoS = %.0f EUR/MWh\n' ...
-      'LPoS = %.0f EUR/MWh\n' ...
-      'IRR = %.3f percent\n' ...
-      'Discharged energy = %.0f MWh\n' ...
-      'Value of Arbitrage = %.0f kEUR/MW/year\n' ...
-      ], ...
-      BESS.Size/1e3, BESS.LCoS,BESS.LPoS, BESS.IRR*1e2, BESS.E, BESS.VoSA);  
-  text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
-  axis off
 
-  subplot(2,1,2);
+%     subplot(2,1,2);                   % Battery charge/discharge power
+% 
+%     bar(1:length(BESS.C),abs(min(BESS.C,0)), 'FaceColor', '#DE8F6E')
+%     hold on
+%     bar(1:length(BESS.C),abs(max(BESS.C,0)), 'FaceColor', '#88AB75')
+% %     yline(BESS.Size/1e3,'-','1 C');
+% %     yline(BESS.Size/2e3,'-','0.5 C');
+% %     yline(-BESS.Size/1e3,'-','-1 C');
+% %     yline(-BESS.Size/2e3,'-','-0.5 C');
+%     ylim([0 1.6*max(BESS.C)])
+%     xlim([5950 5950+24])
+%     xticks((5950)+(0:4:24))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Arbitrage window within one day','FontSize',10,'FontWeight', 'Bold')
+% %     title('Battery arbitrage charging behavior in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     legend('Discharge to Grid', 'Charge from Grid','Location','northeastoutside','FontSize',8,'NumColumns',2);
+%     legend('boxoff')
+%     hold off
 
-    yyaxis left                       % DAM  2019
+% 
+%  figure('Name','Scanario 3 Battery limits','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% 
+% subplot(1,2,1);                 % Excess Energy         
+%     hold on
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+AWEarb.Batt)/1e3, 'FaceColor', '#DE8F6E')
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*Battery.Size)/1e3, 'FaceColor', '#564D80')
+%     bar(1:length(Battery.DoD/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
+%     yline(0.9*Battery.Size/1e3,'-','90 %');
+%     yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','bottom' );
+%     ylim([0 1.2*0.9*Battery.Size/1e3])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing energy capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     legend('Battery Arbitrage Energy','Smoothing Energy' ,'Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+% 
+% subplot(1,2,2);             % Excess Power 
+%     bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power))*Kite.Power/1e3, 'FaceColor', '#564D80')
+%     hold on
+%     bar(1:length(AWEarb.C),abs(min(AWEarb.C,0)), 'FaceColor', '#DE8F6E')
+%     bar(1:length(AWEarb.C),abs(max(AWEarb.C,0)), 'FaceColor', '#88AB75')
+%     yline(Battery.Size/1e3,'-','1 C');
+%     ylim([0 1.2*Battery.Size/1e3])
+%     xlim([5950 5950+24*14])
+%     title('Smoothing power capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hour in Year','FontSize',10,'FontWeight', 'Bold')
+%     legend('Smoothing power', 'Battery discharge power','Battery charge power','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%     hold off
 
-    plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',0.2, 'color', '#DFB4BE')
-    title('Battery arbitrage charging behavior in two summer weeks','FontSize',10,'FontWeight', 'Bold')
-    xlim([4380 4716])
-    ylim([20 60])
-    ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
-
-
-    yyaxis right                    % Battery charge/discharge power
-
-    area(1:length(BESS.C),min(BESS.C,0), 'FaceColor', '#DE8F6E')
+figure('Name','Scanario 3 battery limits','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% 
+% subplot(3,1,1);                 % Energy capacity  
+% 
+%     hold on
+%     bar(1:length(Battery.DoD/1e3),Battarb.Batt/1e3, 'FaceColor', '#564D80')
+%     area(1:length(Battery.DoD/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
+%     yline(0.9*Battery.Size/1e3,'-','90 %','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+%     yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','bottom' ,'LabelHorizontalAlignment','left' );
+%     ylim([0 1.2*0.9*Battery.Size/1e3])
+%     xlim([5688 5688+24*14])
+%     title('Energy use of battery capacity','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+% hold off
+% 
+% subplot(3,1,2);             % Excess Power 
+%     hold on
+%     bar(1:length(AWEarb.C),max(Battarb.C,0), 'FaceColor', '#DE8F6E')
+%     bar(1:length(AWEarb.C),abs(min(Battarb.C,0)), 'FaceColor', '#88AB75')
+%     yline(BESS.Size/1e3,'-','1 C','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+%     ylim([0 1.2*Battery.Size/1e3])
+%     xlim([5688 5688+24*14])
+%     title('Power use of battery power limit','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+%     legend('Battery charge', 'Battery discharge','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%     set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+% hold off
+% 
+% subplot(3,1,3);   % DAM price
+    plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'Color', '#C59FC9')
     hold on
-    area(1:length(BESS.C),max(BESS.C,0), 'FaceColor', '#88AB75')
-%     yline(BESS.Size/1e3,'-','1 C');
-%     yline(BESS.Size/2e3,'-','0.5 C');
-%     yline(-BESS.Size/1e3,'-','-1 C');
-%     yline(-BESS.Size/2e3,'-','-0.5 C');
-    ylim([1.2*min(BESS.C) 1.2*max(BESS.C)])
-    xlim([4380 4716])
+    ylim([15 80])
+    xlim([5688 5688+24*14])
+    xticks((5688+12)+(0:24:(336-12)))
+    xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+    title('DAM price','FontSize',10,'FontWeight', 'Bold')
+    ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+    xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+    set(gca,'TickLength',[0 0]);
+hold off
+
+
+
+
+
+%% Plots Scenario 4 AWE + Battery arbitrage
+
+
+figure('Name','Scenario 3 AWE+Batt arbitrage','units', 'normalized', 'outerposition', [0 0.05 0.5 0.6])
+% 
+%   subplot(2,1,1);
+% 
+%   hold on
+%   str_2_print = sprintf(['AWE + Battery seperate arbitrage\n\n' ...
+%       'LCoE = %.0f EUR/MWh\n' ...
+%       'LPoE = %.1f EUR/MWh\n' ...
+%       'IRR = %.3f percent\n' ...
+%       'Sold kite energy = %.0f MWh\n' ...
+%       'Sold battery energy = %.0f MWh\n' ...
+%       'Value of Arbitrage = %.0f kEUR/MW/year\n' ...
+%       ], ...
+%       AWEarb.LCoE, AWEarb.LPoE, AWEarb.IRR*1e2, AWEultracap.KiteE, AWEarb.battE,AWEarb.VoSA);  
+% 
+%   text(0.1, 0.85, str_2_print, 'Interpreter', 'latex', 'FontSize', 12, 'VerticalAlignment', 'cap'); 
+%   axis off
+% 
+%   subplot(2,1,2);
+% 
+%     yyaxis left                       % DAM  2019
+% 
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',0.2, 'color', '#DFB4BE')
+%     title('AWE and Battery power in two summer weeks','FontSize',10,'FontWeight', 'Bold')
+%     xlim([4380 4716])
+%     ylim([20 80])
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Hours in Week','FontSize',10,'FontWeight', 'Bold')
+% 
+% 
+%     yyaxis right                    % Power2Grid flows
+% 
+    bar(1:length(Kite.Power),Kite.Power1/1e3, 'FaceColor', '#577399')
+    hold on
+    bar(1:length(AWEarb.C),abs(min(AWEarbit.C,0)), 'FaceColor', '#DE8F6E')
+    bar(1:length(AWEarb.C),abs(max(AWEarbit.C,0)), 'FaceColor', '#88AB75')
+    ylim([0 130])
+    xlim([5950 5950+24*14])
+    xticks((5950+12)+(0:24:(336-12)))
+    xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
     ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
-    xlabel('Hour in Week','FontSize',10,'FontWeight', 'Bold')
-    legend('Market price','Discharge to Grid', 'Charge from Grid','Battery Power from Grid','Location','northeastoutside','FontSize',8,'NumColumns',1);
+    xlabel('Day within week','FontSize',10,'FontWeight', 'Bold')
+     title('AWE + Battery arbitrage operation','FontSize',10,'FontWeight', 'Bold')
+    legend('Kite Power to Grid', 'Battery Power to Grid','Battery Power from Grid','Location','northeastoutside','FontSize',8,'NumColumns',3);
     legend('boxoff')
-    ax = gca;
-    ax.YAxis(1).Color = 'k';
-    ax.YAxis(2).Color = 'k';
+    set(gca,'TickLength',[0 0]);
+%     ax = gca;
+%     ax.YAxis(1).Color = 'k';
+%     ax.YAxis(2).Color = 'k';
     hold off
+
+
+
+
+figure('Name','Scanario 4 battery limits','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% 
+% subplot(3,1,1);                 % Energy capacity  
+% 
+%     hold on
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+AWEarb.Batt)/1e3, 'FaceColor', '#564D80')
+%     bar(1:length(Battery.DoD/1e3),(Battery.Smoothing+0.1*Battery.Size)/1e3, 'FaceColor', '#DE8F6E')
+%     bar(1:length(Battery.DoD/1e3),ones(1,length(Battery.Smoothing))*0.1*Battery.Size/1e3, 'FaceColor', '#FFFFFF')
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     yline(0.9*Battery.Size/1e3,'-','90 %','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+%     yline(0.1*Battery.Size/1e3,'-','10 %','LabelVerticalAlignment','bottom' ,'LabelHorizontalAlignment','left' );
+%     ylim([0 1.2*0.9*Battery.Size/1e3])
+%     xlim([5950 5950+24*14])
+%     title('Energy use of battery capacity','FontSize',10,'FontWeight', 'Bold')
+%     legend('Battery Energy', 'Smoothing Energy','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%     ylabel('Energy [kWh]','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+%     grid on
+% hold off
+% 
+% subplot(3,1,2);             % Excess Power 
+    hold on
+    bar(1:length(AWEarb.C),0.98*(Battery.Preq/max(Kite.Power1))*Kite.Power1/1e3+ abs(AWEarb.C), 'FaceColor', '#DE8F6E')
+    bar(1:length(Kite.Power),0.98*(Battery.Preq/max(Kite.Power1))*Kite.Power1/1e3, 'FaceColor', '#564D80')
+    yline(Battery.Size/1e3,'-','1 C','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+    xline(6018,':','LineWidth',2);
+    xline(6070,':','LineWidth',2);
+    xline(6186,':','LineWidth',2);
+    xline(6215,':','LineWidth',2);
+    ylim([0 1.2*Battery.Size/1e3])
+    xlim([5950 5950+24*14])
+    title('Power use of battery power limit','FontSize',10,'FontWeight', 'Bold')
+    ylabel('Power [kW]','FontSize',10,'FontWeight', 'Bold')
+    legend('Battery Power', 'Smoothing Power','Location','northeastoutside','FontSize',8,'NumColumns',1);
+    legend('boxoff')
+    set(gca,'TickLength',[0 0],'XTick',[], 'YTick', []);
+hold off
+% 
+% subplot(3,1,3);   % DAM price
+%     plot(1:length(inputs.DAMp),inputs.DAMp,'LineWidth',1, 'Color', '#C59FC9')
+%     hold on
+%     xline(6018,':','LineWidth',2);
+%     xline(6070,':','LineWidth',2);
+%     xline(6186,':','LineWidth',2);
+%     xline(6215,':','LineWidth',2);
+%     ylim([15 75])
+%     xlim([5950 5950+24*14])
+%     xticks((5950+12)+(0:24:(336-12)))
+%     xticklabels({'M','T','W','T','F','S','S','M','T','W','T','F','S','S'})
+%     title('DAM price','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('Price [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Day in Week','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0]);
+% hold off
+% 
+figure('Name','Scanario 4 replacement shares','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+% 
+% 
+% ax = gca();
+% pie(ax,[sum(Battery.DoD)/(Battery.Preq*inputs.Li_N) AWEarbit.f_repl-sum(Battery.DoD)/(Battery.Preq*inputs.Li_N)]/AWEarbit.f_repl);
+% ax.Colormap = (1/255)*[119, 133, 172; 154, 198, 197;56,163,165];
+% 
+% legend({'Power Smoothing', 'Arbitrage'},'Location','southoutside','Orientation','horizontal')
+% legend('boxoff')
+
+ax = gca();
+bar(ax,[  sum(Battery.DoD)/(Battery.Preq) 0 ;...
+      sum(Battery.DoD)/(Battery.Preq) AWEarbit.f_repl*inputs.Li_N-sum(Battery.DoD)/(Battery.Preq)],'Stacked')
+ax.Colormap = (1/255)*[119, 133, 172; 154, 198, 197;56,163,165];
+title('Battery replacement cycle per application type','FontSize',10,'FontWeight', 'Bold')
+ylim([0 1200])
+ylabel('Full load cycles','FontSize',10,'FontWeight', 'Bold')
+xticklabels({'AWE + Battery','AWE + Battery arbitrage'})
+legend({'Power Smoothing', 'Arbitrage'},'Location','southoutside','Orientation','horizontal','NumColumns',1)
+legend('boxoff')
+
+%% Plots discussion
+
+Disc.LCoE = [150 133 60.43 123];
+Disc.E = [343 343 48.65 343+38.7];
+Disc.IRR = [7.09 9.69 9.8];
+Disc.NPV = [-29 61 -20.2 65.6];
+Disc.Capex = [495 457 18.2 457];
+
+% figure('Name','Scenario comparison metrics','units', 'normalized', 'outerposition', [0 0.05 0.5 0.6])
+% 
+% yyaxis left
+%     bar(Disc.LCoE, 'FaceColor', '#B3DCE7');
+%     hold on
+%     text(1:length(Disc.LCoE),Disc.LCoE,num2str(Disc.LCoE'),'vert','bottom','horiz','center'); 
+%     ylim([0 170])
+%     xticklabels({'AWE + UC','AWE + Batt','Batt arbitrage','AWE + Batt arbitrage'})
+%     xtickangle(45)
+%     title('LCoE values levelized over energy discharged to grid','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('LCoE [EUR/MWh]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Scenario','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0]);
+%     hold off
+% 
+%         yyaxis right 
+%         plot((1:4),Disc.E,'LineWidth',1, 'Color', '#545E75')
+%         hold on
+%         plot((1:4),Disc.E,'.','MarkerSize',15, 'color', '#0D3B66')
+%         ylim([0 550])
+%         ylabel('Energy discharged to grid [MWh]','FontSize',10,'FontWeight', 'Bold')
+%         ax = gca;
+%         ax.YAxis(1).Color = 'k';
+%         ax.YAxis(2).Color = 'k';
+% 
+% figure('Name','Scenario comparison metrics','units', 'normalized', 'outerposition', [0 0.05 0.5 0.6])
+% 
+% yyaxis left
+%     bar(Disc.NPV, 'FaceColor', '#B3DCE7');
+%     hold on
+%     text(1:length(Disc.NPV),Disc.NPV,num2str(Disc.NPV'),'vert','bottom','horiz','center'); 
+%     ylim([-40 80])
+%     xticklabels({'AWE + UC','AWE + Batt','Batt arbitrage','AWE + Batt arbitrage'})
+%     xtickangle(45)
+%     title('NPV values and CapEx','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('NPV [kEUR]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Scenario','FontSize',10,'FontWeight', 'Bold')
+%     set(gca,'TickLength',[0 0]);
+%     hold off
+% 
+%         yyaxis right 
+%         plot((1:4),Disc.Capex,'LineWidth',1, 'Color', '#545E75')
+%         hold on
+%         plot((1:4),Disc.Capex,'.','MarkerSize',15, 'color', '#0D3B66')
+%         ylim([-400 800])
+%         ylabel('CapEx [kEUR]','FontSize',10,'FontWeight', 'Bold')
+%         ax = gca;
+%         ax.YAxis(1).Color = 'k';
+%         ax.YAxis(2).Color = 'k';
+
+ figure('Name','Scenario comparison metrics','units', 'normalized', 'outerposition', [0 0.05 0.5 0.6])
+
+    bar(Disc.IRR, 'FaceColor', '#B3DCE7');
+    hold on
+    text(1:length(Disc.IRR),Disc.IRR,num2str(Disc.IRR'),'vert','bottom','horiz','center');
+    yline(7.8,'-','Discount rate','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+    ylim([6 11])
+    xticklabels({'AWE + UC','AWE + Batt','AWE + Batt arbitrage'})
+    xtickangle(45)
+    title('Internal rate of return compared to discount rate assumed','FontSize',10,'FontWeight', 'Bold')
+    ylabel('IRR [%]','FontSize',10,'FontWeight', 'Bold')
+    xlabel('Scenario','FontSize',10,'FontWeight', 'Bold')
+    set(gca,'TickLength',[0 0]);
+    hold off
+
+%% Sensitivity
+
+
+% Sensitivity.Eff = [0.8 0.81 0.82 0.83 0.84 0.85 0.86 0.87 0.88 0.89 0.9 ];
+% Sensitivity.Bsize = [140 160 180 200 220];
+% Sensitivity.BIRR = [7.09 9.68 9.76; 7.09 9.54 9.62;7.09 9.4 9.48; 7.09 9.26 9.34;7.09 9.12 9.2; 7.09 8.99 9.06; 7.09 8.85 8.93];
+% Sensitivity.EffIRR = [9.7299 9.7332 9.7364 9.7396 9.742 9.7445 9.7469 9.7494 9.7518 9.7543 9.7568];
+% Sensitivity.EFFE = [15.5354 15.7296 15.9238 16.1179 16.3121 16.5063 16.7005 16.8947 17.0889 17.2831 17.4773];
+% Sensitivity.SizeE =[17.4773 22.7173 27.6479  32.3242 36.7328];
+% Sensitivity.SizeIRR = [9.7568 9.6124 9.4628 9.3131 9.1641];
+
+
+% figure('Name','Sensitivity','units', 'normalized', 'outerposition', [0.2 0.2 0.5 0.5]);
+
+
+% %     scatter(Sensitivity.Bprice,Sensitivity.BIRR(:,1),"filled",'LineWidth',1, 'Color', '#3F826D')
+%     hold on
+%     scatter(Sensitivity.Bprice,Sensitivity.BIRR(:,2),"filled",'LineWidth',1, 'Color', '#545E75')
+%     scatter(Sensitivity.Bprice,Sensitivity.BIRR(:,3),"filled",'LineWidth',1, 'Color', '#C03221')
+%     ylim([8.8 9.8 ])
+%     xticks((130:15:220))
+%     title('Sensitivity scenario 2 and 4 to battery price','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('IRR [%]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Battery price [EUR/kWh]','FontSize',10,'FontWeight', 'Bold')
+%     legend('AWE + ultracapacitor', 'AWE + Battery', 'AWE + Battery arbitrage','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%     grid on
+
+
+%     yyaxis left
+%     scatter(Sensitivity.Eff,Sensitivity.EffIRR,"filled",'LineWidth',1, 'Color', '#3F826D')
+%     hold on
+% %     ylim([])
+%     xticks((0.80:0.01:0.90))
+%     title('Sensitivity scenario 4 to battery round-trip efficiency','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('IRR [%]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Battery efficiency [%]','FontSize',10,'FontWeight', 'Bold')
+%     legend('IRR', 'E_{discharged}','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     grid on
+% 
+%     yyaxis right  
+%      plot(Sensitivity.Eff,Sensitivity.EFFE,'LineWidth',1, 'Color', '#545E75')
+%      ylim([14 20])
+%     ylabel('Discharged battery energy [MWh]','FontSize',10,'FontWeight', 'Bold')
+%     legend('IRR', 'E_{discharged}','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%      ax = gca;
+%      ax.YAxis(1).Color = 'k';
+%      ax.YAxis(2).Color = 'k';
+
+%     yyaxis left
+%     scatter(Sensitivity.Bsize,Sensitivity.SizeIRR,"filled",'LineWidth',1, 'Color', '#3F826D')
+%     hold on
+%     ylim([9 10])
+%     xticks((140:20:220))
+%     title('Sensitivity scenario 4 to battery round-trip efficiency','FontSize',10,'FontWeight', 'Bold')
+%     ylabel('IRR [%]','FontSize',10,'FontWeight', 'Bold')
+%     xlabel('Battery size [kWh]','FontSize',10,'FontWeight', 'Bold')
+%     legend('IRR', 'E_{discharged}','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     grid on
+% 
+%     yyaxis right  
+%      plot(Sensitivity.Bsize,Sensitivity.SizeE,'LineWidth',1, 'Color', '#545E75')
+%      ylim([14 45])
+%     ylabel('Discharged battery energy [MWh]','FontSize',10,'FontWeight', 'Bold')
+%     legend('IRR', 'E_{discharged}','Location','northeastoutside','FontSize',8,'NumColumns',1);
+%     legend('boxoff')
+%      ax = gca;
+%      ax.YAxis(1).Color = 'k';
+%      ax.YAxis(2).Color = 'k';
+
 
 
 %% Misc

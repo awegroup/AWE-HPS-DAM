@@ -17,6 +17,6 @@ function [LF, VoSA] = StorageMetrics(R,C,Cap,Type)
 LF = nnz(C)/length(C);
 
 
-VoSA = R/(Cap*Type/1e6)/1e3;
+VoSA = R/(Cap*Type/1e3)/1e3;
 
 end

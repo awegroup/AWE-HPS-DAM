@@ -12,12 +12,32 @@
 %   clc; 
 clearvars;
 
+% addpath(genpath([pwd '/inputFiles']));
+% addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\src'));
+% addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\inputFiles'));
+% addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\lib'));
+
+% Add the source code folders of AWE-Power and AWE-Eco to path
+addpath(genpath('C:\Users\bartz\TU Delft\Sustainable Energy Technology\Thesis\Msc Thesis hybrid power using AWE\HPP model\Git\AWE-Power/src'));
+addpath(genpath('C:\Users\bartz\TU Delft\Sustainable Energy Technology\Thesis\Msc Thesis hybrid power using AWE\HPP model\Git\AWE-Power/lib'));
+addpath(genpath('C:\Users\bartz\Documents\GitHub\AWE-Eco'));
+
+% Add inputFiles to path
 addpath(genpath([pwd '/inputFiles']));
-addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\src'));
-addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\inputFiles'));
-addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\lib'));
 
+% Run AWE-Power
+% Load defined input file
+inputs = loadInputs('inputFile_100kW_baseCase.yml');
 
+% Run AWE-Power
+[inputs, outputs, optimDetails, processedOutputs] = main_awePower(inputs);
+
+% Run AWE-Eco
+% Import inputs
+inp = eco_system_inputs_awePower(inputs, processedOutputs);
+
+% Run EcoModel by parsing the inputs
+[inp,par,eco] = eco_main(inp);
 
 %% System inputs
 
@@ -174,12 +194,6 @@ Scen4.arbprof = Scen4.R_arb - inputs.batt_price*Scen2.E_batt_req*(Scen4.f_cycles
 % disp(['Scenario 4 IRR = ',num2str(round(Scen4.IRR*1e2,4)),' %'])
 % disp(['Scenario 4 Arbitrage profit = ',num2str(round(Scen4.arbprof,4)),' EUR'])
 
-Scen1.t_cyc = [0,1.05000000000000,59,60.0500000000000,64.0500000000000,75.0700000000000,79.0700000000000];
-Scen1.P_e = [0,137.795628013230,131.353472847588,0,-24.6278969333646,-0.0354535056597164,0];
-Scen1.P_m = [0,199.746972005509,191.796732567887,0,-19.1015675261193,-0.0274979846727906,0];
-Scen1.P_m_avg = 148250.920152283/1e3;
-
-
 %% Plots 
 
 % Scenario parameters
@@ -190,9 +204,12 @@ Scen1.P_m_avg = 148250.920152283/1e3;
 % AWE performance
 %%%%%%%%%%%%%%%%%
 
+Scen1.P_m = [0,200.000000000000,200.000000000000,0,-30.8149680256871,5.45696821063757e-14,0];
+Scen1.P_m_avg = 148250.920152283/1e3;
 
-% plotAWEperf(Scen1.P, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
-%                , inputs.vw, Scen1.P_e, Scen1.P_m, Scen1.P_m_avg, Scen1.t_cyc)
+plotAWEperf(Scen1.P, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
+               , inputs.vw, [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0])
+
 
 
 % Storage performance

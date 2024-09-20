@@ -17,6 +17,8 @@ addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\src'));
 addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\inputFiles'));
 addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\lib'));
 
+
+
 %% System inputs
 
 % inputs = loadInputs('inputFile_100kW_AWEHPS.yml');
@@ -57,8 +59,8 @@ Scen1.OMC = 12.2e3;         % Operational cost kite system without intermediate 
 Scen3.w = 4;
 Scen3.var = 0.17;
 
-Scen4.w = 5;
-Scen4.var = 0.164;
+Scen4.w = 4;
+Scen4.var = 0.17;
 
 %% AWE performance
 
@@ -73,7 +75,7 @@ Scen4.var = 0.164;
 
 [Scen1.P_sm, Scen1.E_sm, Scen1.E_res, Scen2.E_batt_req, Scen1.E_UC_req] = AWEsm(inputs.vw, Scen1.P, [0	0	0 0 39.2114406427936	93.0947366719285	207.022440717841	412.999777754543	702.156555319391	810.070535420744	805.462031428633	808.180879889064	809.929699115073	813.114155193377	816.935309245319	821.167178788006	825.732017996912	830.577439826927	835.618275680234	840.916791101337	847.169221886612]/1e3...
                                                               , [0	0	0 0 199.110877845002	87.6714004467267	85.5139407777646	87.3579932218051	93.3237218054094	80.8992375788376	79.9581035213846	79.4595074569484	79.1889899452987	79.0790839654564	79.0738117712405	79.1297853113387	79.2192139488680	79.3068747121754	79.3241622327488	79.2940943437130	79.9040793712790]...
-                                                                 , [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0]);
+                                                                 , [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0], [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]');
 
 
 %% Scenario 1 AWE + UC
@@ -86,7 +88,7 @@ Scen4.var = 0.164;
 % AWE + UC economic metrics
 
 
-[Scen1.LCoE, Scen1.LRoE, Scen1.LPoE] = EcoMetrics(inputs.r,Scen1.R_kite,Scen1.AEP,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y);
+[Scen1.LCoE, Scen1.LRoE, Scen1.LPoE, Scen1.Payb] = EcoMetrics(inputs.r,Scen1.R_kite,Scen1.AEP,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y);
 Scen1.NPV = NPV(inputs.r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y);
 [Scen1.IRR,~] = fsolve(@(r) NPV(r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 
@@ -103,7 +105,7 @@ Scen1.NPV = NPV(inputs.r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_
 % AWE + Batt economic metrics
 
 
-[Scen2.LCoE, Scen2.LRoE, Scen2.LPoE] = EcoMetrics(inputs.r,Scen2.R_kite,Scen1.AEP,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y);
+[Scen2.LCoE, Scen2.LRoE, Scen2.LPoE, Scen2.Payb] = EcoMetrics(inputs.r,Scen2.R_kite,Scen1.AEP,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y);
 Scen2.NPV = NPV(inputs.r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y);
 [Scen2.IRR,~] = fsolve(@(r) NPV(r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 
@@ -127,7 +129,7 @@ Scen2.NPV = NPV(inputs.r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_
 
 Scen3.arb_E = sum(abs(min(Scen3.P,0)))/1e3;
 
-[Scen3.LCoE, Scen3.LRoE, Scen3.LPoE] = EcoMetrics(inputs.r,Scen3.R_arb,Scen3.arb_E,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y);
+[Scen3.LCoE, Scen3.LRoE, Scen3.LPoE, Scen3.Payb] = EcoMetrics(inputs.r,Scen3.R_arb,Scen3.arb_E,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y);
 Scen3.NPV = NPV(inputs.r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y);
 [Scen3.IRR,~] = fsolve(@(r) NPV(r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 [Scen3.LF, Scen3.VoSA] = StorageMetrics(Scen3.R_arb,Scen3.P,Scen2.E_batt_req,inputs.batt_type);
@@ -152,7 +154,7 @@ Scen4.R = Scen4.R_arb + Scen4.R_kite;
 Scen4.arb_E = sum(abs(min(Scen4.P,0)))/1e3;
 Scen4.E_dis = Scen1.AEP + Scen4.arb_E;
 
-[Scen4.LCoE, Scen4.LRoE, Scen4.LPoE] = EcoMetrics(inputs.r,Scen4.R,Scen4.E_dis,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y);
+[Scen4.LCoE, Scen4.LRoE, Scen4.LPoE, Scen4.Payb] = EcoMetrics(inputs.r,Scen4.R,Scen4.E_dis,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y);
 Scen4.NPV = NPV(inputs.r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y);
 [Scen4.IRR,~] = fsolve(@(r) NPV(r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
 [Scen4.LF, Scen4.VoSA] = StorageMetrics(Scen4.R_arb,Scen4.P,Scen2.E_batt_req,inputs.batt_type);
@@ -165,12 +167,24 @@ Scen4.f_cycles = (sum(abs(Scen4.P)) + sum(Scen1.E_sm))/(Scen2.E_batt_req*inputs.
 Scen2.f_cycles = sum(Scen1.E_sm)/(Scen2.E_batt_req*inputs.N_li_cycles);
 Scen4.arbprof = Scen4.R_arb - inputs.batt_price*Scen2.E_batt_req*(Scen4.f_cycles-Scen2.f_cycles);
 
-disp('---------------------------------------------------------')
-disp(['window = ',num2str(round(Scen4.w,2)),' hrs'])
-disp(['variance = ',num2str(round(Scen4.var,4)),' EUR/MWh'])
-disp(['Scenario 4 Edisch = ',num2str(round(Scen4.arb_E,4)),' MWh'])
-disp(['Scenario 4 IRR = ',num2str(round(Scen4.IRR*1e2,4)),' %'])
-disp(['Scenario 4 Arbitrage profit = ',num2str(round(Scen4.arbprof,4)),' EUR'])
+% disp('---------------------------------------------------------')
+% disp(['window = ',num2str(round(Scen4.w,2)),' hrs'])
+% disp(['variance = ',num2str(round(Scen4.var,4)),' EUR/MWh'])
+% disp(['Scenario 4 E_{dis} = ',num2str(round(Scen4.arb_E,4)),' MWh'])
+% disp(['Scenario 4 IRR = ',num2str(round(Scen4.IRR*1e2,4)),' %'])
+% disp(['Scenario 4 Arbitrage profit = ',num2str(round(Scen4.arbprof,4)),' EUR'])
+
+Scen1.t_cyc = [0,1.05000000000000,59,60.0500000000000,64.0500000000000,75.0700000000000,79.0700000000000];
+Scen1.P_e = [0,137.795628013230,131.353472847588,0,-24.6278969333646,-0.0354535056597164,0];
+Scen1.P_m = [0,199.746972005509,191.796732567887,0,-19.1015675261193,-0.0274979846727906,0];
+Scen1.P_m_avg = 148250.920152283/1e3;
+
+Scen1.E_o = Scen1.P_e(3)*(Scen1.t_cyc(3)-Scen1.t_cyc(2)) +  - Scen1.t_cyc(3)*100)/3600;
+Scen1.E_i = (polyarea(Scen1.t_cyc(4:7),Scen1.P_e(4:7)) - (Scen1.t_cyc(7)-Scen1.t_cyc(4))*100)/3600;
+
+% disp('---------------------------------------------------------')
+% disp(['E_{e, o} -  E_{e, avg} = ',num2str(round(Scen1.E_o,2)),' kWh'])
+% disp(['E_{e, i} +  E_{e, avg} = ',num2str(round(Scen1.E_i,2)),' kWh'])
 
 %% Plots 
 
@@ -182,23 +196,42 @@ disp(['Scenario 4 Arbitrage profit = ',num2str(round(Scen4.arbprof,4)),' EUR'])
 % AWE performance
 %%%%%%%%%%%%%%%%%
 
-% plotAWEperf(Scen1.P, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
-%                , inputs.vw, [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0]) 
+
+plotAWEperf(Scen1.P, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
+               , inputs.vw, Scen1.P_e, Scen1.P_m, Scen1.P_m_avg, Scen1.t_cyc)
+
 
 % Storage performance
 %%%%%%%%%%%%%%%%%%%%%
 
-% plotStorperf(Scen1.P_sm, Scen1.E_sm, Scen2.E_batt_req, Scen1.P, Scen1.E_UC_req, Scen4.P)
+% plotStorperf( Scen1, Scen2, Scen4)
 
 % Arbitrage operation
 %%%%%%%%%%%%%%%%%%%%%
 
-% plotArbOpp(DAM, Psm, Esm, Ebatmax, Kite, Eucmax, C)
+% plotArbOpp(inputs, Scen1,Scen2, Scen3, Scen4)
+
+% Plots Scenario 1
+%%%%%%%%%%%%%%%%%%
+% Scen1.SoC = zeros(8760,1);
+% plotScenario(5950, inputs, Scen1, Scen1, Scen1.E_UC_req, inputs.N_UC_cycles)
+
+% Plots Scenario 2
+%%%%%%%%%%%%%%%%%%
+
+% plotScenario(5950, inputs, Scen1, Scen2, Scen2.E_batt_req, inputs.N_li_cycles)
+
+% Plots Scenario 3
+%%%%%%%%%%%%%%%%%%
+% Scen3.E_res = zeros(8760,1);
+% Scen3.E_sm = zeros(8760,1);
+% Scen3.P_sm = zeros(8760,1);
+% plotScenario(5950, inputs, Scen3, Scen3, Scen2.E_batt_req, inputs.N_li_cycles)
 
 % Plots Scenario 4
 %%%%%%%%%%%%%%%%%%
 
-% plotScenario(Scen1.E_res, Scen1.P_sm, Scen4.SoC, Scen2.E_batt_req, Scen4.P, inputs.DAM, Scen1.E_sm, Scen4.f_repl, inputs.N_li_cycles)
+% plotScenario(5950, inputs, Scen1, Scen4, Scen2.E_batt_req, inputs.N_li_cycles)
 
 % Discussion
 %%%%%%%%%%%%

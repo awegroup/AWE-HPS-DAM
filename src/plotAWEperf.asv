@@ -71,7 +71,8 @@ figure('Name','AWE instantaneous reeling energy','units', 'normalized', 'outerpo
     shade(t_cyc(1:4),P_e(1:4),t_cyc(1:4),100*ones(1,length(P_m(1:4))),'FillType',[1 2],'FillColor',[31 147 108]/255);
     text(t_cyc(3)-45,P_e(3)-15,['E_{e, o} -  E_{e, avg} =  ' num2str(round(E_o,2)) '  kWh'],'FontSize',10);
     
-    shade(t_cyc(3:7),P_e(3:7),t_cyc(3:7),100*ones(1,length(P_m(3:7))),'FillType',[2 1],'FillColor',[223 115 85]/255);
+%     shade(t_cyc(3:7),P_e(3:7),t_cyc(3:7),100*ones(1,length(P_m(3:7))),'FillType',[2 1],'FillColor',[223 115 85]/255);
+    area(t_cyc(3:7),100*ones(1,length(P_m(3:7))),,'FaceColor',[223 115 85]/255);
     text(t_cyc(4)+2,P_e(4)+60,' E_{e, i} +  E_{e, avg}','FontSize',10);
     text(t_cyc(4)+2,P_e(4)+40,'         = ','FontSize',10);
     text(t_cyc(4)+2,P_e(4)+25,['    ' num2str(round(E_i,2)) ' kWh'],'FontSize',10);

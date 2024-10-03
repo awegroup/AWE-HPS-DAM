@@ -230,7 +230,7 @@ Scen1.P_m_avg = 148250.920152283/1e3;
 % Discussion
 %%%%%%%%%%%%
 
-% plotDiscuss(inputs, Scen1, Scen2, Scen3, Scen4) 
+plotDiscuss(inputs, Scen1, Scen2, Scen3, Scen4) 
 
 
 

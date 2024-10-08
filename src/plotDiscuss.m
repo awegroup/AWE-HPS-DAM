@@ -69,7 +69,7 @@ yyaxis left
     bar(Disc.IRR, 'FaceColor', '#B3DCE7');
     hold on
     text(1:length(Disc.IRR),Disc.IRR,num2str(Disc.IRR'),'vert','bottom','horiz','center');
-    yline(7.8,'-','Discount rate','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
+    yline(inputs.r,'-','Discount rate','LabelVerticalAlignment','top' ,'LabelHorizontalAlignment','left' );
     ylim([7.5 14])
     xticklabels({'AWE + UC','AWE + Batt','AWE + Batt arbitrage'})
     xtickangle(45)

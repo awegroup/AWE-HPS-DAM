@@ -1,0 +1,40 @@
+name: 'inputFile_100kW_AWEHPS'  # Input file name
+
+
+# HPS simulation parameters
+
+subsidy: 110 # AWE electricity feed-in-tarriff [EUR/MWh]
+
+batt_size: 140 # Battery size [kWh]
+batt_type: 1 # Battery C rating
+batt_price: 130 # 2030 rechargable battery price [EUR/MWh]
+batt_eff: 0.9  # Battery round-trip efficiency [%]
+N_li_cycles: 10000 # Battery lifetime [full load cycles]
+N_li_years: 10 # Battery calendar lifetime [years]
+batt_min: 0.1 # Battery SoC lower limit 
+batt_max: 0.9 # Battery SoC upper limit
+
+UC_price: 60000 # Ultracapacitor price [EUR/MWh]
+N_UC_cycles: 1000000 # UC lifetime [full load cycles]
+N_UC_years: 16 # UC calendar lifetime [years]
+
+r: 0.078 #discount rate
+Ny: 25 # project lifetime [years]
+
+
+# AWE power performance
+
+Pcurve: [0,0,0,0,6823.05494180757,20750.8552913604,40035.5511607199,63415.6188669052,85700.7504181529,99999.9999634139,99999.9999993995,100000.000000000,99999.9999612856,99999.9999939655,99999.9999993012,99999.9999999965,100000.000000000,100000.000000000,100000.000000000,100000,100000.000000000] #Power curve [W]
+StorageExchange: [0,0,0,0,39.2114406427936,93.0947366719285,207.022440717841,412.999777754543,702.156555319391,810.070535420744,805.462031428633,808.180879889064,809.929699115073,813.114155193377,816.935309245319,821.167178788006,825.732017996912,830.577439826927,835.618275680234,840.916791101337,847.169221886612] # Esm per wind speed [Wh]
+tCycle: [0,0,0,0,199.110877845002,87.6714004467267,85.5139407777646,87.3579932218051,93.3237218054094,80.8992375788376,79.9581035213846,79.4595074569484,79.1889899452987,79.0790839654564,79.0738117712405,79.1297853113387,79.2192139488680,79.3068747121754,79.3241622327488,79.2940943437130,79.9040793712790] # cycle length per wind speed [s]
+Peinst: [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0] #instananeous electrical power
+
+tCycRated: [0,1.05000000000000,59,60.0500000000000,64.0500000000000,75.0700000000000,79.0700000000000] #instantaneous time instances rated wind speed [s]
+Perated: [0,137.795628013230,131.353472847588,0,-24.6278969333646,-0.0354535056597164,0] # electrical instantaneous power at rated wind speed [kW]
+Pmrated: [0,199.746972005509,191.796732567887,0,-19.1015675261193,-0.0274979846727906,0] # mechanical instantaneous power at rated wind speed [kW]
+Pmavg: 148.250920152283 # average mechanical isntantaneous power
+
+# AWE cost performance
+
+ICC: 439000 #Capital expendatures AWe system excluding power smoothing component [EUR]
+OMC: 12200 #Capital expendatures AWe system excluding power smoothing component [EUR]

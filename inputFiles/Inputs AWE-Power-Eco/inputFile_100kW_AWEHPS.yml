@@ -1,4 +1,23 @@
-name: 'inputFile_100kW_baseCase'  # Input file name
+name: 'inputFile_100kW_AWEHPS'  # Input file name
+
+
+# HPS Settings
+
+sub: 110 # AWE electricity feed-in-tarriff [EUR/MWh]
+
+batt_size: 140 # Battery size [kWh]
+batt_type: 1 # Battery C rating
+batt_price: 130 # 2030 rechargable battery price [EUR/MWh]
+batt_eff: 0.9  # Battery round-trip efficiency [%]
+N_li_cycles: 10000 # Battery lifetime [full load cycles]
+N_li_years: 10 # Battery calendar lifetime [years]
+batt_min: 0.1 # Battery SoC lower limit 
+batt_max: 0.9 # Battery SoC upper limit
+
+UC_price: 60000 # Ultracapacitor price [EUR/MWh]
+N_UC_cycles: 100000 # UC lifetime [full load cycles]
+N_UC_years: 16 # UC calendar lifetime [years]
+
 
 # Model Settings
 numDeltaLelems: 4  # Number of stroke length elements [num]

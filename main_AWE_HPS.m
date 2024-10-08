@@ -12,7 +12,6 @@
 %   clc; 
 clearvars;
 
-addpath(genpath([pwd '/inputFiles']));
 addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\src'));
 addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\inputFiles'));
 addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\lib'));
@@ -21,35 +20,7 @@ addpath(genpath('C:\Users\bartz\Documents\GitHub\MSc_Bart_Zweers\lib'));
 
 %% System inputs
 
-% inputs = loadInputs('inputFile_100kW_AWEHPS.yml');
-inputs.subsidy = 110;                          % Subsidized electricity price [EUR/MWh] 110 from german AWE
-
-inputs.batt_size        = 140;                % kWh
-inputs.batt_type        = 1;                    % P/E or C rate
-inputs.batt_price       = 130;                % [EUR/kWh]  source: https://www.nrel.gov/docs/fy21osti/79236.pdf
-inputs.batt_eff         = 0.90;                 % Round trip efficiency [%]
-inputs.N_li_cycles = 1e4;                       % [lifetime cycles]
-inputs.N_li_years = 10;                         % [lifetime years]
-
-inputs.UC_price       = 6e4;                % [EUR/Wh]  source: https://www.nrel.gov/docs/fy21osti/79236.pdf
-inputs.UC_eff         = 1;                  % Round trip efficiency [%]
-inputs.N_UC_cycles = 1e6;                     % [lifetime cycles]
-inputs.N_UC_years = 16;                       % [lifetime years]
-
-inputs.batt_min     = 0.1;      % SoC lower limit strage system [-]
-inputs.batt_max     = 0.9;      % SoC upper limit strage system [-]
-
-  inputs.business.N_y     = 25; % project years
-  inputs.business.r_d     = 0.08; % cost of debt
-  inputs.business.r_e     = 0.12; % cost of equity
-  inputs.business.TaxRate = 0.25; % Tax rate (25%)
-  inputs.business.DtoE    = 70/30; % Debt-Equity-ratio 
-
-inputs.r = inputs.business.DtoE/(1+ inputs.business.DtoE)*inputs.business.r_d*(1-inputs.business.TaxRate) + 1/(1+inputs.business.DtoE)*inputs.business.r_e; 
-
-Scen1.ICC = 439e3;          % Capital cost kite system without intermediate storage
-Scen1.OMC = 12.2e3;         % Operational cost kite system without intermediate storage
-
+inputs = loadInputs('inputFile_AWEHPS.yml');
 
 %% Scenario parameters
 
@@ -67,15 +38,12 @@ Scen4.var = 0.17;
 
 % AWE kite power hourly [kW]
 
-[Scen1.P, Scen1.Cf, Scen1.AEP] = AWEperf(inputs.vw, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
-                            , 4, 10);
+[Scen1.P, Scen1.Cf, Scen1.AEP] = AWEperf(inputs.vw, inputs.Pcurve', 4, 10);
 
 
 % AWE power smoothing timeseries [kW]
 
-[Scen1.P_sm, Scen1.E_sm, Scen1.E_res, Scen2.E_batt_req, Scen1.E_UC_req] = AWEsm(inputs.vw, Scen1.P, [0	0	0 0 39.2114406427936	93.0947366719285	207.022440717841	412.999777754543	702.156555319391	810.070535420744	805.462031428633	808.180879889064	809.929699115073	813.114155193377	816.935309245319	821.167178788006	825.732017996912	830.577439826927	835.618275680234	840.916791101337	847.169221886612]/1e3...
-                                                              , [0	0	0 0 199.110877845002	87.6714004467267	85.5139407777646	87.3579932218051	93.3237218054094	80.8992375788376	79.9581035213846	79.4595074569484	79.1889899452987	79.0790839654564	79.0738117712405	79.1297853113387	79.2192139488680	79.3068747121754	79.3241622327488	79.2940943437130	79.9040793712790]...
-                                                                 , [0,137.381331953625,137.209204335937,0,-39.7295922699621,7.03564325810917e-14,0], [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]');
+[Scen1.P_sm, Scen1.E_sm, Scen1.E_res, Scen2.E_batt_req, Scen1.E_UC_req] = AWEsm(inputs.vw, Scen1.P, inputs.StorageExchange/1e3, inputs.tCycle, inputs.Peinst, inputs.Pcurve');
 
 
 %% Scenario 1 AWE + UC
@@ -83,14 +51,14 @@ Scen4.var = 0.17;
 % AWE+UC energy and profit performance
 
 [Scen1.R_arb, Scen1.R_kite, Scen1.f_repl, Scen1.CapEx, Scen1.OpEx] = Scenperf(Scen1.P, zeros(8760,1), inputs.DAM, inputs.subsidy, Scen1.E_sm,...
-                                                                               inputs.N_UC_years, inputs.N_UC_cycles, inputs.UC_price, Scen1.E_UC_req, Scen1.ICC, Scen1.OMC);
+                                                                               inputs.N_UC_years, inputs.N_UC_cycles, inputs.UC_price, Scen1.E_UC_req, inputs.ICC, inputs.OMC);
 
 % AWE + UC economic metrics
 
 
-[Scen1.LCoE, Scen1.LRoE, Scen1.LPoE, Scen1.Payb] = EcoMetrics(inputs.r,Scen1.R_kite,Scen1.AEP,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y);
-Scen1.NPV = NPV(inputs.r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y);
-[Scen1.IRR,~] = fsolve(@(r) NPV(r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[Scen1.LCoE, Scen1.LRoE, Scen1.LPoE, Scen1.Payb] = EcoMetrics(inputs.r,Scen1.R_kite,Scen1.AEP,Scen1.CapEx,Scen1.OpEx, inputs.Ny);
+Scen1.NPV = NPV(inputs.r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.Ny);
+[Scen1.IRR,~] = fsolve(@(r) NPV(r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.Ny),0,optimoptions('fsolve','Display','none'));
 
 
 
@@ -99,15 +67,15 @@ Scen1.NPV = NPV(inputs.r,Scen1.R_kite,Scen1.CapEx,Scen1.OpEx, inputs.business.N_
 % AWE + Batt energy and profit performance
 
 [Scen2.R_arb, Scen2.R_kite, Scen2.f_repl, Scen2.CapEx, Scen2.OpEx] = Scenperf(Scen1.P, zeros(8760,1), inputs.DAM, inputs.subsidy, Scen1.E_sm, ...
-                                                                                inputs.N_li_years, inputs.N_li_cycles, inputs.batt_price, Scen2.E_batt_req, Scen1.ICC, Scen1.OMC);
+                                                                                inputs.N_li_years, inputs.N_li_cycles, inputs.batt_price, Scen2.E_batt_req, inputs.ICC, inputs.OMC);
 
 
 % AWE + Batt economic metrics
 
 
-[Scen2.LCoE, Scen2.LRoE, Scen2.LPoE, Scen2.Payb] = EcoMetrics(inputs.r,Scen2.R_kite,Scen1.AEP,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y);
-Scen2.NPV = NPV(inputs.r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y);
-[Scen2.IRR,~] = fsolve(@(r) NPV(r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[Scen2.LCoE, Scen2.LRoE, Scen2.LPoE, Scen2.Payb] = EcoMetrics(inputs.r,Scen2.R_kite,Scen1.AEP,Scen2.CapEx,Scen2.OpEx, inputs.Ny);
+Scen2.NPV = NPV(inputs.r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.Ny);
+[Scen2.IRR,~] = fsolve(@(r) NPV(r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.Ny),0,optimoptions('fsolve','Display','none'));
 
 
 %% Scenario 3 Batt arbitrage
@@ -129,9 +97,9 @@ Scen2.NPV = NPV(inputs.r,Scen2.R_kite,Scen2.CapEx,Scen2.OpEx, inputs.business.N_
 
 Scen3.arb_E = sum(abs(min(Scen3.P,0)))/1e3;
 
-[Scen3.LCoE, Scen3.LRoE, Scen3.LPoE, Scen3.Payb] = EcoMetrics(inputs.r,Scen3.R_arb,Scen3.arb_E,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y);
-Scen3.NPV = NPV(inputs.r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y);
-[Scen3.IRR,~] = fsolve(@(r) NPV(r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[Scen3.LCoE, Scen3.LRoE, Scen3.LPoE, Scen3.Payb] = EcoMetrics(inputs.r,Scen3.R_arb,Scen3.arb_E,Scen3.CapEx,Scen3.OpEx, inputs.Ny);
+Scen3.NPV = NPV(inputs.r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.Ny);
+[Scen3.IRR,~] = fsolve(@(r) NPV(r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.Ny),0,optimoptions('fsolve','Display','none'));
 [Scen3.LF, Scen3.VoSA] = StorageMetrics(Scen3.R_arb,Scen3.P,Scen2.E_batt_req,inputs.batt_type);
 
 
@@ -145,7 +113,7 @@ Scen3.NPV = NPV(inputs.r,Scen3.R_arb,Scen3.CapEx,Scen3.OpEx, inputs.business.N_y
 % AWE + Batt arbitrage energy and profit performance
 
 [Scen4.R_arb, Scen4.R_kite, Scen4.f_repl, Scen4.CapEx, Scen4.OpEx] = Scenperf(Scen1.P, Scen4.P, inputs.DAM, inputs.subsidy, Scen1.E_sm, ...
-                                                                                inputs.N_li_years, inputs.N_li_cycles, inputs.batt_price, Scen2.E_batt_req, Scen1.ICC, Scen1.OMC);
+                                                                                inputs.N_li_years, inputs.N_li_cycles, inputs.batt_price, Scen2.E_batt_req, inputs.ICC, inputs.OMC);
 
 
 % AWE + Batt arbitrage economic metrics
@@ -154,9 +122,9 @@ Scen4.R = Scen4.R_arb + Scen4.R_kite;
 Scen4.arb_E = sum(abs(min(Scen4.P,0)))/1e3;
 Scen4.E_dis = Scen1.AEP + Scen4.arb_E;
 
-[Scen4.LCoE, Scen4.LRoE, Scen4.LPoE, Scen4.Payb] = EcoMetrics(inputs.r,Scen4.R,Scen4.E_dis,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y);
-Scen4.NPV = NPV(inputs.r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y);
-[Scen4.IRR,~] = fsolve(@(r) NPV(r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.business.N_y),0,optimoptions('fsolve','Display','none'));
+[Scen4.LCoE, Scen4.LRoE, Scen4.LPoE, Scen4.Payb] = EcoMetrics(inputs.r,Scen4.R,Scen4.E_dis,Scen4.CapEx,Scen4.OpEx, inputs.Ny);
+Scen4.NPV = NPV(inputs.r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.Ny);
+[Scen4.IRR,~] = fsolve(@(r) NPV(r,Scen4.R,Scen4.CapEx,Scen4.OpEx, inputs.Ny),0,optimoptions('fsolve','Display','none'));
 [Scen4.LF, Scen4.VoSA] = StorageMetrics(Scen4.R_arb,Scen4.P,Scen2.E_batt_req,inputs.batt_type);
 
 
@@ -179,6 +147,16 @@ Scen1.P_e = [0,137.795628013230,131.353472847588,0,-24.6278969333646,-0.03545350
 Scen1.P_m = [0,199.746972005509,191.796732567887,0,-19.1015675261193,-0.0274979846727906,0];
 Scen1.P_m_avg = 148250.920152283/1e3;
 
+%% Save output
+
+  if not(isfolder('outputFiles'))
+    mkdir 'outputFiles';
+  end
+  % Change names to associate with specific scenario context
+  save(['outputFiles/AWE-HPS_' 'Scenario1' '.mat'], 'Scen1');
+  save(['outputFiles/AWE-HPS_' 'Scenario2' '.mat'], 'Scen2');
+  save(['outputFiles/AWE-HPS_' 'Scenario3' '.mat'], 'Scen3');
+  save(['outputFiles/AWE-HPS_' 'Scenario4' '.mat'], 'Scen4');
 
 %% Plots 
 
@@ -191,8 +169,7 @@ Scen1.P_m_avg = 148250.920152283/1e3;
 %%%%%%%%%%%%%%%%%
 
 
-% plotAWEperf(Scen1.P, [0	0	0 0 6823.05494180757	20750.8552913604	40035.5511607199	63415.6188669052	85700.7504181529	99999.9999634139	99999.9999993995	100000.000000000	99999.9999612856	99999.9999939655	99999.9999993012	99999.9999999965	100000.000000000	100000.000000000	100000.000000000	100000	100000.000000000]'...
-%                , inputs.vw, Scen1.P_e, Scen1.P_m, Scen1.P_m_avg, Scen1.t_cyc)
+% plotAWEperf(Scen1.P, inputs.Pcurve', inputs.vw, inputs.Perated, inputs.Pmrated, inputs.Pmavg, inputs.tCycRated)
 
 
 % Storage performance
@@ -230,7 +207,7 @@ Scen1.P_m_avg = 148250.920152283/1e3;
 % Discussion
 %%%%%%%%%%%%
 
-plotDiscuss(inputs, Scen1, Scen2, Scen3, Scen4) 
+% plotDiscuss(inputs, Scen1, Scen2, Scen3, Scen4) 
 
 
 
